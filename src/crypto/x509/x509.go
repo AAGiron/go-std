@@ -2154,6 +2154,23 @@ func marshalCertificatePolicies(policyIdentifiers []asn1.ObjectIdentifier) (pkix
 	return ext, nil
 }
 
+func marshalSCT(ti []TransItem) (pkix.Extension, error) {
+
+	ext := pkix.Extension{
+		Id: asn1.ObjectIdentifier{1, 3, 101, 75},  // RFC 9162 Section 7.1: Transparency Information X.509v3 extension 
+		Critical: false,
+	}
+
+	var err error
+	
+	ext.Value, err = asn1.Marshal(ti)
+	if err != nil {
+		return pkix.Extension{}, err
+	}
+	
+	return ext, nil
+}
+
 func buildCSRExtensions(template *CertificateRequest) ([]pkix.Extension, error) {
 	var ret []pkix.Extension
 
@@ -3056,4 +3073,124 @@ func CreateRevocationList(rand io.Reader, template *RevocationList, issuer *Cert
 		SignatureAlgorithm: signatureAlgorithm,
 		SignatureValue:     asn1.BitString{Bytes: signature, BitLength: len(signature) * 8},
 	})
+}
+
+
+// RFC 9162 4.6	
+type CTExtension struct {
+	ExtensionType int
+	ExtensionData []byte
+}
+
+// VersionedTransType
+const (
+	x509_sct_v2 int = 0x0102
+)
+
+type TransItem struct {
+	VersionedTransType int
+	Data SignedCertificateTimestampDataV2
+}
+
+type SignedCertificateTimestampDataV2 struct {
+	LogID asn1.ObjectIdentifier
+	Timestamp int
+	SCTExtensions []CTExtension
+	Signature []byte
+}
+
+
+func CreateSCT(rand io.Reader, template, parent *Certificate, pub, priv interface{}) (pkix.Extension, error) {
+
+	var dummyExt pkix.Extension
+
+	intCAPriv := priv.(crypto.Signer)
+
+	hashFunc, signatureAlgorithm, err := signingParamsForPublicKey(intCAPriv.Public(), template.SignatureAlgorithm)
+
+	asn1Issuer, err := subjectBytes(parent)
+	if err != nil {
+		return dummyExt, err
+	}
+
+	asn1Subject, err := subjectBytes(template)
+	if err != nil {
+		return dummyExt, err
+	}
+
+	publicKeyBytes, publicKeyAlgorithm, err := marshalPublicKey(pub)
+	if err != nil {
+		return dummyExt, err
+	}
+
+	encodedPublicKey := asn1.BitString{BitLength: len(publicKeyBytes) * 8, Bytes: publicKeyBytes}
+
+	authorityKeyId := template.AuthorityKeyId
+	if !bytes.Equal(asn1Issuer, asn1Subject) && len(parent.SubjectKeyId) > 0 {
+		authorityKeyId = parent.SubjectKeyId
+	}
+
+	subjectKeyId := template.SubjectKeyId
+	if len(subjectKeyId) == 0 && template.IsCA {
+		// SubjectKeyId generated using method 1 in RFC 5280, Section 4.2.1.2:
+		//   (1) The keyIdentifier is composed of the 160-bit SHA-1 hash of the
+		//   value of the BIT STRING subjectPublicKey (excluding the tag,
+		//   length, and number of unused bits).
+		h := sha1.Sum(publicKeyBytes)
+		subjectKeyId = h[:]
+	}
+
+	extensions, err := buildCertExtensions(template, bytes.Equal(asn1Subject, emptyASN1Subject), authorityKeyId, subjectKeyId)
+	if err != nil {
+		return dummyExt, err
+	}
+	
+	c := tbsCertificate{
+		Version:            2,
+		SerialNumber:       template.SerialNumber,
+		SignatureAlgorithm: signatureAlgorithm,
+		Issuer:             asn1.RawValue{FullBytes: asn1Issuer},
+		Validity:           validity{template.NotBefore.UTC(), template.NotAfter.UTC()},
+		Subject:            asn1.RawValue{FullBytes: asn1Subject},
+		PublicKey:          publicKeyInfo{nil, publicKeyAlgorithm, encodedPublicKey},
+		Extensions:         extensions,
+	}
+
+	tbsCertContents, err := asn1.Marshal(c)	
+
+	// ... CA Sends precertificate to logs ...
+
+	toSign := tbsCertContents
+	if hashFunc != 0 {
+		h := hashFunc.New()
+		h.Write(toSign)
+		toSign = h.Sum(nil)
+	}
+
+	var signerOpts crypto.SignerOpts = hashFunc
+	if template.SignatureAlgorithm != 0 && template.SignatureAlgorithm.isRSAPSS() {
+		signerOpts = &rsa.PSSOptions{
+			SaltLength: rsa.PSSSaltLengthEqualsHash,
+			Hash:       hashFunc,
+		}
+	}
+
+	
+	tbsCertSignature, err := intCAPriv.Sign(rand, toSign, signerOpts)
+	if err != nil {
+		return dummyExt, err
+	}
+
+
+	ti := TransItem{
+		x509_sct_v2,
+		SignedCertificateTimestampDataV2{
+			LogID: asn1.ObjectIdentifier{1,1,1,1,1,1,1,1},
+			Timestamp: time.Now().Nanosecond()/1000,
+			SCTExtensions: []CTExtension{},
+			Signature: tbsCertSignature,
+		},
+	}
+
+	return marshalSCT(ti)
 }
