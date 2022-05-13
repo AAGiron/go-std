@@ -2157,7 +2157,7 @@ func marshalCertificatePolicies(policyIdentifiers []asn1.ObjectIdentifier) (pkix
 func marshalSCT(ti []TransItem) (pkix.Extension, error) {
 
 	ext := pkix.Extension{
-		Id: asn1.ObjectIdentifier{1, 3, 101, 75},  // RFC 9162 Section 7.1: Transparency Information X.509v3 extension 
+		Id: asn1.ObjectIdentifier{1,3,6,1,4,1,11129,2,4,2},
 		Critical: false,
 	}
 
@@ -3104,23 +3104,60 @@ func CreateSCT(rand io.Reader, template, parent *Certificate, pub, priv interfac
 
 	var dummyExt pkix.Extension
 
+	tbsCertSignature1, err := sctSignTBSCertificate(rand, template, parent, pub, priv)
+	if err != nil {
+		return dummyExt, err
+	}
+
+	ti1 := TransItem{
+		x509_sct_v2,
+		SignedCertificateTimestampDataV2{
+			LogID: asn1.ObjectIdentifier{1,1,1,1,1,1,1,1},
+			Timestamp: time.Now().Nanosecond()/1000,
+			SCTExtensions: []CTExtension{},
+			Signature: tbsCertSignature1,
+		},
+	}
+
+	tbsCertSignature2, err := sctSignTBSCertificate(rand, template, parent, pub, priv)
+	if err != nil {
+		return dummyExt, err
+	}
+
+	ti2 := TransItem{
+		x509_sct_v2,
+		SignedCertificateTimestampDataV2{
+			LogID: asn1.ObjectIdentifier{1,1,1,1,1,1,1,2},
+			Timestamp: time.Now().Nanosecond()/1000,
+			SCTExtensions: []CTExtension{},
+			Signature: tbsCertSignature2,
+		},
+	}
+
+	tiList := []TransItem{ti1, ti2}
+
+	return marshalSCT(tiList)
+}
+
+func sctSignTBSCertificate(rand io.Reader, template, parent *Certificate, pub, priv interface{}) ([]byte, error) {
+
 	intCAPriv := priv.(crypto.Signer)
 
 	hashFunc, signatureAlgorithm, err := signingParamsForPublicKey(intCAPriv.Public(), template.SignatureAlgorithm)
 
 	asn1Issuer, err := subjectBytes(parent)
 	if err != nil {
-		return dummyExt, err
+		return nil, err
 	}
 
 	asn1Subject, err := subjectBytes(template)
 	if err != nil {
-		return dummyExt, err
+		return nil, err
 	}
 
 	publicKeyBytes, publicKeyAlgorithm, err := marshalPublicKey(pub)
 	if err != nil {
-		return dummyExt, err
+		return nil, err
 	}
 
 	encodedPublicKey := asn1.BitString{BitLength: len(publicKeyBytes) * 8, Bytes: publicKeyBytes}
@@ -3142,7 +3179,7 @@ func CreateSCT(rand io.Reader, template, parent *Certificate, pub, priv interfac
 
 	extensions, err := buildCertExtensions(template, bytes.Equal(asn1Subject, emptyASN1Subject), authorityKeyId, subjectKeyId)
 	if err != nil {
-		return dummyExt, err
+		return nil, err
 	}
 	
 	c := tbsCertificate{
@@ -3178,19 +3215,9 @@ func CreateSCT(rand io.Reader, template, parent *Certificate, pub, priv interfac
 	
 	tbsCertSignature, err := intCAPriv.Sign(rand, toSign, signerOpts)
 	if err != nil {
-		return dummyExt, err
+		return nil, err
 	}
 
+	return tbsCertSignature, nil
 
-	ti := TransItem{
-		x509_sct_v2,
-		SignedCertificateTimestampDataV2{
-			LogID: asn1.ObjectIdentifier{1,1,1,1,1,1,1,1},
-			Timestamp: time.Now().Nanosecond()/1000,
-			SCTExtensions: []CTExtension{},
-			Signature: tbsCertSignature,
-		},
-	}
-
-	return marshalSCT(ti)
 }
