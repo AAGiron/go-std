@@ -3221,3 +3221,32 @@ func sctSignTBSCertificate(rand io.Reader, template, parent *Certificate, pub, p
 	return tbsCertSignature, nil
 
 }
+
+func SignFromParams(rand io.Reader, signAlgo SignatureAlgorithm, toSign []byte, priv interface{}) ([]byte, pkix.AlgorithmIdentifier, error) {
+
+	signKey := priv.(crypto.Signer)
+
+	hashFunc, signatureAlgorithm, err := signingParamsForPublicKey(signKey.Public(), signAlgo)
+	
+	if hashFunc != 0 {
+		h := hashFunc.New()
+		h.Write(toSign)
+		toSign = h.Sum(nil)
+	}
+
+	var signerOpts crypto.SignerOpts = hashFunc
+	if signAlgo != 0 && signAlgo.isRSAPSS() {
+		signerOpts = &rsa.PSSOptions{
+			SaltLength: rsa.PSSSaltLengthEqualsHash,
+			Hash:       hashFunc,
+		}
+	}
+
+	signature, err := signKey.Sign(rand, toSign, signerOpts)
+	if err != nil {
+		return nil, pkix.AlgorithmIdentifier{}, err
+	}
+
+	return signature, signatureAlgorithm, nil
+
+}
