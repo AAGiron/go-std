@@ -99,6 +99,7 @@ type clientHelloMsg struct {
 	earlyData                        bool
 	pskModes                         []uint8
 	pskIdentities                    []pskIdentity
+	certPSKIdentities								 []certPSKIdentity
 	pskBinders                       [][]byte
 	ech                              []byte
 	echIsInner                       bool
@@ -312,6 +313,18 @@ func (m *clientHelloMsg) marshal() []byte {
 				// RFC 8446, Section 4.2.10
 				b.AddUint16(extensionEarlyData)
 				b.AddUint16(0) // empty extension_data
+			}
+			if len(m.certPSKIdentities) > 0 {
+				b.AddUint16(extensionCertPSK)
+				b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
+					b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
+						for _, identity := range m.certPSKIdentities {
+							b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
+								b.AddBytes(identity.label)
+							})
+						}											
+					})
+				})
 			}
 			if len(m.pskModes) > 0 {
 				// RFC 8446, Section 4.2.9
@@ -647,6 +660,22 @@ func (m *clientHelloMsg) unmarshal(data []byte) bool {
 				}
 				m.keyShares = append(m.keyShares, ks)
 			}
+		case extensionCertPSK:
+			var identities cryptobyte.String
+			
+			if !extData.ReadUint16LengthPrefixed(&identities) || identities.Empty() {
+				return false
+			}
+
+			for !identities.Empty() {
+				var certPSK certPSKIdentity
+				if !readUint16LengthPrefixed(&identities, &certPSK.label) ||				
+					len(certPSK.label) == 0 {
+					return false
+				}
+				m.certPSKIdentities = append(m.certPSKIdentities, certPSK)
+			}
+		
 		case extensionEarlyData:
 			// RFC 8446, Section 4.2.10
 			m.earlyData = true
@@ -1204,6 +1233,47 @@ func (m *newSessionTicketMsgTLS13) unmarshal(data []byte) bool {
 		if !extData.Empty() {
 			return false
 		}
+	}
+
+	return true
+}
+
+type newCertPSKMsgTLS13 struct {
+	raw          []byte
+	nonce        []byte
+	label        []byte	
+}
+
+
+func (m *newCertPSKMsgTLS13) marshal() []byte {
+	if m.raw != nil {
+		return m.raw
+	}
+
+	var b cryptobyte.Builder
+	b.AddUint8(typeNewCertPSK)
+	b.AddUint24LengthPrefixed(func(b *cryptobyte.Builder) {		
+		b.AddUint8LengthPrefixed(func(b *cryptobyte.Builder) {
+			b.AddBytes(m.nonce)			
+		})
+		b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
+			b.AddBytes(m.label)
+		})						
+	})
+
+	m.raw = b.BytesOrPanic()
+	return m.raw
+}
+
+func (m *newCertPSKMsgTLS13) unmarshal(data []byte) bool {	
+	*m = newCertPSKMsgTLS13{raw: data}
+	s := cryptobyte.String(data)
+
+	if !s.Skip(4) ||  // message type and uint24 length field
+		!readUint8LengthPrefixed(&s, &m.nonce) ||
+		!readUint16LengthPrefixed(&s, &m.label) ||
+		!s.Empty() {
+		return false
 	}
 
 	return true

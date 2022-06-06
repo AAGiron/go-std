@@ -10,6 +10,7 @@ import (
 	"crypto/hmac"
 	"crypto/kem"
 	"crypto/rsa"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"hash"
@@ -343,6 +344,16 @@ func (hs *serverHandshakeStateTLS13) processClientHello() error {
 	if _, err := io.ReadFull(c.config.rand(), hs.hello.random); err != nil {
 		c.sendAlert(alertInternalError)
 		return err
+	}
+
+	if len(hs.clientHello.certPSKIdentities) != 0 {
+
+		psk, _, err := loadCertPSK(string(hs.clientHello.certPSKIdentities[0].label), false)
+		if err != nil {
+			return err
+		}		
+		
+		fmt.Printf("Server: Received PSK:\n%x\n\n", psk)
 	}
 
 	if hs.clientHello.echIsInner {
@@ -1215,6 +1226,12 @@ func (hs *serverHandshakeStateTLS13) sendServerFinished() error {
 		if err := hs.sendSessionTickets(); err != nil {
 			return err
 		}
+
+		if c.config.WrappedCertEnabled {
+			if err := hs.sendCertPSK(); err != nil {
+				return err
+			}
+		}		
 	}
 
 	return nil
@@ -1276,6 +1293,93 @@ func (hs *serverHandshakeStateTLS13) sendSessionTickets() error {
 	if _, err := c.writeRecord(recordTypeHandshake, m.marshal()); err != nil {
 		return err
 	}
+
+	return nil
+}
+
+func (hs *serverHandshakeStateTLS13) sendCertPSK() error {
+	c := hs.c
+
+	if hs.clientFinished == nil {  // It could be already computed by sendSessionTickets
+		hs.clientFinished = hs.suite.finishedHash(c.in.trafficSecret, hs.transcript)
+		
+		finishedMsg := &finishedMsg{
+			verifyData: hs.clientFinished,
+		}
+		
+		hs.transcript.Write(finishedMsg.marshal())
+	}
+	
+	resumptionSecret := hs.suite.deriveSecret(hs.masterSecret,
+		resumptionLabel, hs.transcript)
+
+	m := new(newCertPSKMsgTLS13)
+	
+	/* --------------------------------- Início --------------------------------- */
+
+	// Este trecho de código é necessário para geração do state, que será 
+	// cifrado e usado como label/identidade da PSK. Foi feito desta forma
+	// com a intenção de imitar o que é feito no PSK do TLS
+
+
+	var certsFromClient [][]byte
+	for _, cert := range c.peerCertificates {
+		certsFromClient = append(certsFromClient, cert.Raw)
+	}
+	
+	
+	state := sessionStateTLS13{
+		cipherSuite:      hs.suite.id,
+		createdAt:        uint64(c.config.time().Unix()),
+		resumptionSecret: resumptionSecret,
+		certificate: Certificate{
+			Certificate:                 certsFromClient,
+			OCSPStaple:                  c.ocspResponse,
+			SignedCertificateTimestamps: c.scts,
+		},
+	}
+
+	cipherSuite := cipherSuiteTLS13ByID(hs.suite.id)
+	if cipherSuite == nil {
+		return errors.New("wrapped cert: unknown ciphersuit")
+	}
+
+	/* ----------------------------------- Fim ---------------------------------- */	
+		
+	var err error
+
+	m.label, err = c.encryptTicket(state.marshal())  // Atribuindo o label da PSK
+	if err != nil {
+		return err
+	}
+
+	m.nonce = make([]byte, 32)  // Qual deve ser o tamanho do nonce...?
+
+	if _, err := rand.Read(m.nonce); err != nil {
+		panic("wrapped cert: nonce generation failed: " + err.Error())
+	}
+	
+
+	if _, err := c.writeRecord(recordTypeHandshake, m.marshal()); err != nil {
+		return err
+	}
+
+	certPSKMasterSecret := hs.suite.deriveSecret(hs.masterSecret,
+		wrappedCertLabel, hs.transcript)
+
+	psk := cipherSuite.expandLabel(certPSKMasterSecret, "cert psk",
+		m.nonce, cipherSuite.hash.Size())
+
+	c.conn.RemoteAddr().String()
+
+	// dbKey will be the client's IP address	
+	if err := certPSKWriteToFile(c.conn.RemoteAddr().String(), string(m.label), string(psk), false); err != nil {
+		return err
+	}
+
+	fmt.Printf("Label:\n%x\n\n", m.label)
+	fmt.Printf("Nonce:\n%x\n\n", m.nonce)
+	fmt.Printf("PSK:\n%x\n\n", psk)
 
 	return nil
 }

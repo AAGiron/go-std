@@ -1098,6 +1098,11 @@ func (hs *clientHandshakeStateTLS13) sendClientFinished() error {
 			resumptionLabel, hs.transcript)
 	}
 
+	if c.config.WrappedCertEnabled {
+		c.certPSKMasterSecret = hs.suite.deriveSecret(hs.masterSecret,
+			wrappedCertLabel, hs.transcript)
+	}
+
 	return nil
 }
 
@@ -1147,6 +1152,36 @@ func (c *Conn) handleNewSessionTicket(msg *newSessionTicketMsgTLS13) error {
 
 	cacheKey := clientSessionCacheKey(c.conn.RemoteAddr(), c.config)
 	c.config.ClientSessionCache.Put(cacheKey, session)
+
+	return nil
+}
+
+func (c *Conn) handleNewCertPSK(msg *newCertPSKMsgTLS13) error {
+	if !c.isClient {
+		c.sendAlert(alertUnexpectedMessage)
+		return errors.New("tls: received new session ticket from a client")
+	}
+
+	// if c.config.SessionTicketsDisabled || c.config.ClientSessionCache == nil || c.config.ECHEnabled {
+	// 	return nil
+	// }
+	
+	cipherSuite := cipherSuiteTLS13ByID(c.cipherSuite)
+	if cipherSuite == nil {
+		return c.sendAlert(alertInternalError)
+	}
+
+	// Compute the cert PSK
+	psk := cipherSuite.expandLabel(c.certPSKMasterSecret, "cert psk",
+		msg.nonce, cipherSuite.hash.Size())
+
+	fmt.Printf("Label:\n%x\n\n", msg.label)
+	fmt.Printf("Nonce:\n%x\n\n", msg.nonce)
+	fmt.Printf("PSK:\n%x\n\n", psk)
+
+	if err := certPSKWriteToFile(c.conn.RemoteAddr().String(), string(msg.label), string(psk), true); err != nil {
+		return err
+	}
 
 	return nil
 }

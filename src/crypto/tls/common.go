@@ -17,11 +17,13 @@ import (
 	"crypto/rsa"
 	"crypto/sha512"
 	"crypto/x509"
+	"encoding/csv"
 	"errors"
 	"fmt"
 	"internal/cpu"
 	"io"
 	"net"
+	"os"
 	"runtime"
 	"sort"
 	"strings"
@@ -75,6 +77,7 @@ const (
 	typeCertificateVerify   uint8 = 15
 	typeClientKeyExchange   uint8 = 16
 	typeCertificateCachedInfo uint8 = 17  // Unassigned number. https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-7	
+	typeNewCertPSK					uint8 = 19  // Unassigned number. https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-7	
 	typeFinished            uint8 = 20
 	typeCertificateStatus   uint8 = 22
 	typeKeyUpdate           uint8 = 24
@@ -112,6 +115,7 @@ const (
 	extensionECHIsInner              uint16 = 0xda09 // draft-ietf-tls-esni-10
 	extensionECHOuterExtensions      uint16 = 0xfd00 // draft-ietf-tls-esni-10
 	extensionPDKKEMTLS               uint16 = 0xfd01 // arbitraly chosen
+	extensionCertPSK                 uint16 = 0xfd02 // arbitraly chosen
 )
 
 // TLS signaling cipher suite values
@@ -1035,6 +1039,10 @@ type Config struct {
 	// connection.
 	ECHEnabled bool
 
+	// CertPSKEnabled determines whether the cert_psk extension is enabled for this
+	// connection.
+	WrappedCertEnabled bool
+
 	// ClientECHConfigs are the parameters used by the client when it offers the
 	// ECH extension. If ECH is enabled, a suitable configuration is found, and
 	// the client supports TLS 1.3, then it will offer ECH in this handshake.
@@ -1187,6 +1195,7 @@ func (c *Config) Clone() *Config {
 		CFControl:                   c.CFControl,
 		sessionTicketKeys:           c.sessionTicketKeys,
 		autoSessionTicketKeys:       c.autoSessionTicketKeys,
+		WrappedCertEnabled:          c.WrappedCertEnabled,
 	}
 }
 
@@ -2028,4 +2037,105 @@ func getMessageLength(msg []byte) (uint32, error) {
 	}
 
 	return msg_size, nil
+}
+
+func certPSKWriteToFile(peerIP, pskLabel, psk string, isClient bool) error {
+
+	var fileName string
+
+	if isClient {
+		fileName = "db/client_psk_db.csv"
+	} else {
+		fileName = "db/server_psk_db.csv"
+	}
+
+	csvFile, err := os.OpenFile(fileName, os.O_APPEND|os.O_RDWR, os.ModeAppend)
+	if err != nil {
+		return err
+	}
+
+	defer csvFile.Close()
+
+	csvReader := csv.NewReader(csvFile)
+	
+	for {
+		rec, err := csvReader.Read()
+		
+		if err == io.EOF {
+				break
+		}
+		
+		if err != nil {
+				return err
+		}
+
+		if rec[0] == peerIP {  // If there is already a PSK established for this peer, do not add a new one
+			return  nil
+		}
+	}
+
+	csvwriter := csv.NewWriter(csvFile)
+
+	var rec []string
+
+	if isClient {
+		rec = []string{peerIP, pskLabel, psk} 
+	} else {
+		rec = []string{pskLabel, psk}
+	}
+
+	if err := csvwriter.Write(rec); err != nil {
+		return err
+	}
+		
+	csvwriter.Flush()	
+
+	return nil
+}
+
+func loadCertPSK(key string, isClient bool) ([]byte, []byte, error) {
+
+	var fileName string
+
+	if isClient {
+		fileName = "db/client_psk_db.csv"
+	} else {
+		fileName = "db/server_psk_db.csv"
+	}
+
+	csvFile, err := os.Open(fileName)
+	if err != nil {
+		return nil, nil, err
+	}
+	
+	defer csvFile.Close()
+
+	// read csv values using csv.Reader
+	csvReader := csv.NewReader(csvFile)
+	
+	for {
+		rec, err := csvReader.Read()
+		
+		if err == io.EOF {
+				break
+		}
+		
+		if err != nil {
+				return nil, nil, err
+		}
+
+		if rec[0] == key {
+			if isClient {
+				return []byte(rec[1]), []byte(rec[2]), nil
+			} else {
+				return []byte(rec[1]), nil, nil
+			}			
+		}
+	}
+
+	return nil, nil, nil
+}
+
+type certPSKIdentity struct {
+	label []byte
 }

@@ -73,6 +73,11 @@ type Conn struct {
 	// NewSessionTicket messages. nil if config.SessionTicketsDisabled.
 	resumptionSecret []byte
 
+	// certPSKMasterSecret is the cert_psk_master_secret, used to 
+	// derive the Wrapped Certificate PSK. If config.WrappedCertEnabled
+	// is false, then certPSKMasterSecret will be nil
+	certPSKMasterSecret []byte
+
 	// ticketKeys is the set of active session ticket keys for this
 	// connection. The first one is used to encrypt new tickets and
 	// all are tried to decrypt tickets.
@@ -1122,6 +1127,8 @@ func (c *Conn) readHandshake() (interface{}, error) {
 		m = new(keyUpdateMsg)
 	case typeCertificateCachedInfo:
 		m = new(certificateMsgTLS13CachedInfo)
+	case typeNewCertPSK:
+		m = new(newCertPSKMsgTLS13)
 	default:
 		return nil, c.in.setErrorLocked(c.sendAlert(alertUnexpectedMessage))
 	}
@@ -1271,6 +1278,8 @@ func (c *Conn) handlePostHandshakeMessage() error {
 		return c.handleNewSessionTicket(msg)
 	case *keyUpdateMsg:
 		return c.handleKeyUpdate(msg)
+	case *newCertPSKMsgTLS13:
+		return c.handleNewCertPSK(msg)
 	default:
 		c.sendAlert(alertUnexpectedMessage)
 		return fmt.Errorf("tls: received unexpected handshake message of type %T", msg)

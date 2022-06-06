@@ -359,6 +359,25 @@ func (c *Conn) clientHandshake() (err error) {
 	}
 
 	cacheKey, session, earlySecret, binderKey := c.loadSession(helloResumed)
+
+	var pskLabel, psk []byte
+
+	if c.config.WrappedCertEnabled {
+		pskLabel, psk, err = loadCertPSK(c.conn.RemoteAddr().String(), true)
+		if err != nil {
+			return err
+		}
+
+		if pskLabel == nil {
+			fmt.Println("Couldn't find the Cert PSK")
+		} else {
+			hello.certPSKIdentities = []certPSKIdentity{{label: pskLabel}}
+			fmt.Printf("Client: Recovered Label:\n%x\n\n", pskLabel)
+			fmt.Printf("Client: Recovered PSK:\n%x\n\n", psk)
+			fmt.Printf("Client: Sending PSK label\n\n")
+		}		
+	}
+
 	if cacheKey != "" && session != nil {
 		defer func() {
 			// If we got a handshake failure when resuming a session, throw away

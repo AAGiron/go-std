@@ -31,6 +31,7 @@ const (
 	exporterLabel                            = "exp master"
 	resumptionLabel                          = "res master"
 	trafficUpdateLabel                       = "traffic upd"
+	wrappedCertLabel                         = "wrap master"
 )
 
 // expandLabel implements HKDF-Expand-Label from RFC 8446, Section 7.1.
