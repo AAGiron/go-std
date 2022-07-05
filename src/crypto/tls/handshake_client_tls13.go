@@ -12,7 +12,6 @@ import (
 	"crypto/liboqs_sig"
 	"crypto/rsa"
 	"crypto/x509"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"hash"
@@ -1180,10 +1179,7 @@ func (c *Conn) handleNewCertPSK(msg *newCertPSKMsgTLS13) error {
 	fmt.Printf("Nonce:\n%x\n\n", msg.nonce)
 	fmt.Printf("PSK:\n%x\n\n", psk)
 
-	encodedLabel := hex.EncodeToString(msg.label)
-	encodedPSK := hex.EncodeToString(psk)
-
-	if err := certPSKWriteToFile(c.conn.RemoteAddr().String(), encodedLabel, encodedPSK, true); err != nil {
+	if err := certPSKWriteToFile(c.conn.RemoteAddr().String(), msg.label, psk, true); err != nil {
 		return err
 	}
 

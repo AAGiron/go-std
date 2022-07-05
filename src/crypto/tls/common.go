@@ -18,6 +18,7 @@ import (
 	"crypto/sha512"
 	"crypto/x509"
 	"encoding/csv"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"internal/cpu"
@@ -2039,7 +2040,10 @@ func getMessageLength(msg []byte) (uint32, error) {
 	return msg_size, nil
 }
 
-func certPSKWriteToFile(peerIP, pskLabel, psk string, isClient bool) error {
+func certPSKWriteToFile(peerIP string, pskLabelBytes, pskBytes []byte, isClient bool) error {
+
+	pskLabel := hex.EncodeToString(pskLabelBytes)
+	psk := hex.EncodeToString(pskBytes)
 
 	var fileName string
 

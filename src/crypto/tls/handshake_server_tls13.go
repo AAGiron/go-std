@@ -11,7 +11,6 @@ import (
 	"crypto/kem"
 	"crypto/rand"
 	"crypto/rsa"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"hash"
@@ -1383,11 +1382,8 @@ func (hs *serverHandshakeStateTLS13) sendCertPSK() error {
 
 	c.conn.RemoteAddr().String()
 
-	encodedLabel := hex.EncodeToString(m.label)
-	encodedPSK := hex.EncodeToString(psk)
-
 	// dbKey will be the client's IP address	
-	if err := certPSKWriteToFile(c.conn.RemoteAddr().String(), encodedLabel, encodedPSK, false); err != nil {
+	if err := certPSKWriteToFile(c.conn.RemoteAddr().String(), m.label, psk, false); err != nil {
 		return err
 	}
 
