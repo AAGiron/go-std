@@ -14,11 +14,14 @@ import (
 	"crypto/rsa"
 	"crypto/subtle"
 	"crypto/x509"
+	"encoding/csv"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"hash"
 	"io"
 	"net"
+	"os"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -363,15 +366,22 @@ func (c *Conn) clientHandshake() (err error) {
 	var pskLabel, psk []byte
 
 	if c.config.WrappedCertEnabled {
-		pskLabel, psk, err = loadCertPSK(c.conn.RemoteAddr().String(), true)
+		pskLabel, psk, err = loadCertPSK(c.conn.RemoteAddr().String())
 		if err != nil {
 			return err
 		}
 
 		if pskLabel == nil {
-			fmt.Println("Couldn't find the Cert PSK")
+			fmt.Println("Couldn't find the Cert PSK. Establishing a PSK")
+			hello.certPSK = certPSKExtension{
+				establishPSK: true,				
+			}
 		} else {
-			hello.certPSKIdentities = []certPSKIdentity{{label: pskLabel}}
+			hello.certPSK = certPSKExtension{
+				establishPSK: false,
+				identities: [][]byte{pskLabel},
+			}
+
 			fmt.Printf("Client: Recovered Label:\n%x\n\n", pskLabel)
 			fmt.Printf("Client: Recovered PSK:\n%x\n\n", psk)
 			fmt.Printf("Client: Sending PSK label\n\n")
@@ -1244,4 +1254,47 @@ func hostnameInSNI(name string) string {
 		name = name[:len(name)-1]
 	}
 	return name
+}
+
+func loadCertPSK(key string) (pskLabel []byte, psk []byte, err error) {
+
+	fileName := "db/client_psk_db.csv"
+
+	csvFile, err := os.Open(fileName)
+	if err != nil {
+		return nil, nil, err
+	}
+	
+	defer csvFile.Close()
+
+	// read csv values using csv.Reader
+	csvReader := csv.NewReader(csvFile)
+	
+	for {
+		rec, err := csvReader.Read()
+		
+		if err == io.EOF {
+				break
+		}
+		
+		if err != nil {
+				return nil, nil, err
+		}
+
+		if rec[0] == key {
+			pskLabel, err = hex.DecodeString(rec[1])
+			if err != nil {
+				return nil, nil, err
+			}
+
+			psk, err = hex.DecodeString(rec[2])
+			if err != nil {
+				return nil, nil, err
+			}
+						
+			return pskLabel, psk, nil			
+		}
+	}
+
+	return nil, nil, nil
 }

@@ -2093,49 +2093,7 @@ func certPSKWriteToFile(peerIP, pskLabel, psk string, isClient bool) error {
 	return nil
 }
 
-func loadCertPSK(key string, isClient bool) ([]byte, []byte, error) {
-
-	var fileName string
-
-	if isClient {
-		fileName = "db/client_psk_db.csv"
-	} else {
-		fileName = "db/server_psk_db.csv"
-	}
-
-	csvFile, err := os.Open(fileName)
-	if err != nil {
-		return nil, nil, err
-	}
-	
-	defer csvFile.Close()
-
-	// read csv values using csv.Reader
-	csvReader := csv.NewReader(csvFile)
-	
-	for {
-		rec, err := csvReader.Read()
-		
-		if err == io.EOF {
-				break
-		}
-		
-		if err != nil {
-				return nil, nil, err
-		}
-
-		if rec[0] == key {
-			if isClient {
-				return []byte(rec[1]), []byte(rec[2]), nil
-			} else {
-				return []byte(rec[1]), nil, nil
-			}			
-		}
-	}
-
-	return nil, nil, nil
-}
-
-type certPSKIdentity struct {
-	label []byte
+type certPSKExtension struct {
+	establishPSK bool  // The client will set it to true when it wants to establish a new PSK
+	identities [][]byte
 }

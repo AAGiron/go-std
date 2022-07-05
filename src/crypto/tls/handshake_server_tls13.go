@@ -9,8 +9,9 @@ import (
 	"crypto"
 	"crypto/hmac"
 	"crypto/kem"
-	"crypto/rsa"
 	"crypto/rand"
+	"crypto/rsa"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"hash"
@@ -52,6 +53,7 @@ type serverHandshakeStateTLS13 struct {
 	clientFinished  []byte
 	certReq         *certificateRequestMsgTLS13
 
+	certPSK         []byte
 	handshakeTimings CFEventTLS13ServerHandshakeTimingInfo
 }
 
@@ -346,15 +348,22 @@ func (hs *serverHandshakeStateTLS13) processClientHello() error {
 		return err
 	}
 
-	if len(hs.clientHello.certPSKIdentities) != 0 {
+	if len(hs.clientHello.certPSK.identities) > 0 {
+		// var err error
+		// identitiesLen := len(hs.clientHello.certPSK.identities)
 
-		psk, _, err := loadCertPSK(string(hs.clientHello.certPSKIdentities[0].label), false)
-		if err != nil {
-			return err
-		}		
-		
-		fmt.Printf("Server: Received PSK:\n%x\n\n", psk)
+		// for i := 0; i < identitiesLen; i++ {
+		// 	hs.certPSK, err = loadWrappedCert(hs.clientHello.certPSK.identities[0])			
+		// 	if err != nil {
+		// 		return err
+		// 	}
+		// 	if hs.certPSK != nil {
+		// 		break
+		// 	}
+		// }							
 	}
+		
+		// fmt.Printf("Server: Received PSK:\n%x\n\n", hs.certPSK)
 
 	if hs.clientHello.echIsInner {
 		// If confirming ECH acceptance, then clear the last 8 bytes of the
@@ -1227,7 +1236,9 @@ func (hs *serverHandshakeStateTLS13) sendServerFinished() error {
 			return err
 		}
 
-		if c.config.WrappedCertEnabled {
+		// If wrapped cert is enabled and the client is willing to establish a new PSK
+		// then create a new Cert PSK and send it
+		if c.config.WrappedCertEnabled && hs.clientHello.certPSK.establishPSK {
 			if err := hs.sendCertPSK(); err != nil {
 				return err
 			}
@@ -1372,8 +1383,11 @@ func (hs *serverHandshakeStateTLS13) sendCertPSK() error {
 
 	c.conn.RemoteAddr().String()
 
+	encodedLabel := hex.EncodeToString(m.label)
+	encodedPSK := hex.EncodeToString(psk)
+
 	// dbKey will be the client's IP address	
-	if err := certPSKWriteToFile(c.conn.RemoteAddr().String(), string(m.label), string(psk), false); err != nil {
+	if err := certPSKWriteToFile(c.conn.RemoteAddr().String(), encodedLabel, encodedPSK, false); err != nil {
 		return err
 	}
 
@@ -1519,3 +1533,43 @@ func (hs *serverHandshakeStateTLS13) readClientFinished() error {
 
 	return nil
 }
+
+// func loadWrappedCert(label []byte) (wrappedCert x509.Certificate, err error) {
+// 	encodedLabel := hex.EncodeToString(label)
+
+// 	fileName := ".csv"
+
+// 	csvFile, err := os.Open(fileName)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+	
+// 	defer csvFile.Close()
+
+// 	// read csv values using csv.Reader
+// 	csvReader := csv.NewReader(csvFile)
+	
+// 	for {
+// 		rec, err := csvReader.Read()
+		
+// 		if err == io.EOF {
+// 				break
+// 		}
+		
+// 		if err != nil {
+// 				return nil, nil, err
+// 		}
+
+// 		if rec[0] == encodedLabel {
+// 			certBytes, err = hex.DecodeString(rec[1])
+// 			if err != nil {
+// 				return nil, err
+// 			}
+
+						
+// 			return 
+// 		}
+// 	}
+
+// 	return nil, nil
+// }

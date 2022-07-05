@@ -99,7 +99,7 @@ type clientHelloMsg struct {
 	earlyData                        bool
 	pskModes                         []uint8
 	pskIdentities                    []pskIdentity
-	certPSKIdentities								 []certPSKIdentity
+	certPSK                          certPSKExtension						
 	pskBinders                       [][]byte
 	ech                              []byte
 	echIsInner                       bool
@@ -314,18 +314,28 @@ func (m *clientHelloMsg) marshal() []byte {
 				b.AddUint16(extensionEarlyData)
 				b.AddUint16(0) // empty extension_data
 			}
-			if len(m.certPSKIdentities) > 0 {
+
+			if m.certPSK.establishPSK || (len(m.certPSK.identities) > 0) {				
+				var establish uint8
+				if m.certPSK.establishPSK {
+					establish = 1
+				} else {
+					establish = 0
+				}
+
 				b.AddUint16(extensionCertPSK)
 				b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
+					b.AddUint8(establish)
 					b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
-						for _, identity := range m.certPSKIdentities {
+						for _, identity := range m.certPSK.identities {
 							b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
-								b.AddBytes(identity.label)
+								b.AddBytes(identity)
 							})
-						}											
-					})
-				})
+						}
+					})				
+				})								
 			}
+
 			if len(m.pskModes) > 0 {
 				// RFC 8446, Section 4.2.9
 				b.AddUint16(extensionPSKModes)
@@ -662,18 +672,29 @@ func (m *clientHelloMsg) unmarshal(data []byte) bool {
 			}
 		case extensionCertPSK:
 			var identities cryptobyte.String
+			var establish uint8
+
+			if !extData.ReadUint8(&establish) {
+				return false
+			}
+
+			if establish == 1 {
+				m.certPSK.establishPSK = true
+			} else {
+				m.certPSK.establishPSK = false
+			}
 			
-			if !extData.ReadUint16LengthPrefixed(&identities) || identities.Empty() {
+			if !extData.ReadUint16LengthPrefixed(&identities) {
 				return false
 			}
 
 			for !identities.Empty() {
-				var certPSK certPSKIdentity
-				if !readUint16LengthPrefixed(&identities, &certPSK.label) ||				
-					len(certPSK.label) == 0 {
+				var certPSKIdentity []byte
+				if !readUint16LengthPrefixed(&identities, &certPSKIdentity) ||				
+					len(certPSKIdentity) == 0 {
 					return false
 				}
-				m.certPSKIdentities = append(m.certPSKIdentities, certPSK)
+				m.certPSK.identities = append(m.certPSK.identities, certPSKIdentity)
 			}
 		
 		case extensionEarlyData:
