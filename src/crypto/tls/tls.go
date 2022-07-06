@@ -67,6 +67,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/rsa"
+	"crypto/wrap"
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
@@ -417,6 +418,8 @@ func X509KeyPair(certPEMBlock, keyPEMBlock []byte) (Certificate, error) {
 		if err != nil || err2 != nil || !bytes.Equal(pkBytes, pkBytes2) {
 			return fail(errors.New("tls: private key does not match public key"))
 		}
+	case *wrap.PublicKey:
+		fmt.Println("Wrapped Public Key")
 	default:
 		return fail(errors.New("tls: unknown public key algorithm"))
 	}

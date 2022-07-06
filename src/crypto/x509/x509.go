@@ -8,11 +8,14 @@ package x509
 import (
 	"bytes"
 	"crypto"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/dsa"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/kem"
+	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha1"
 	"crypto/x509/pkix"
@@ -38,9 +41,11 @@ import (
 	circlPki "circl/pki"
 	circlSign "circl/sign"
 
+	"crypto/liboqs_sig"
+	"crypto/wrap"
+
 	"golang.org/x/crypto/cryptobyte"
 	cryptobyte_asn1 "golang.org/x/crypto/cryptobyte/asn1"
-	"crypto/liboqs_sig"
 )
 
 // pkixPublicKey reflects a PKIX public key structure. See SubjectPublicKeyInfo
@@ -119,6 +124,9 @@ func marshalPublicKey(pub interface{}) (publicKeyBytes []byte, publicKeyAlgorith
 	case *liboqs_sig.PublicKey:
 		publicKeyBytes = pub.MarshalBinary()				
 		publicKeyAlgorithm.Algorithm = oidPublicKeyPQTLS  
+	case *wrap.PublicKey:
+		publicKeyBytes = pub.WrappedPk
+		publicKeyAlgorithm.Algorithm = oidPublicKeyAES256ECDSA	
 	default:
 		return nil, pkix.AlgorithmIdentifier{}, fmt.Errorf("x509: unsupported public key type: %T", pub)
 	}
@@ -262,6 +270,7 @@ const (
 	EdDilithium4
 	KEMTLS
 	PQTLS
+	AES256ECDSA
 )
 
 var publicKeyAlgoName = [...]string{
@@ -520,7 +529,7 @@ var (
 	oidPublicKeyEdDilithium4 = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 10} // Cloudflare OID
 	oidPublicKeyKEMTLS       = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 11} // Cloudflare OID
 	oidPublicKeyPQTLS       = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 12}
-	
+	oidPublicKeyAES256ECDSA  = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 13}
 )
 
 func getPublicKeyAlgorithmFromOID(oid asn1.ObjectIdentifier) PublicKeyAlgorithm {
@@ -543,6 +552,8 @@ func getPublicKeyAlgorithmFromOID(oid asn1.ObjectIdentifier) PublicKeyAlgorithm 
 		return KEMTLS
 	case oid.Equal(oidPublicKeyPQTLS):
 		return PQTLS
+	case oid.Equal(oidPublicKeyAES256ECDSA):
+		return AES256ECDSA
 	default:
 		scheme := circlPki.SchemeByOid(oid)
 		if scheme == nil {
@@ -1147,6 +1158,10 @@ func parsePublicKey(algo PublicKeyAlgorithm, keyData *publicKeyInfo) (interface{
 		if err != nil {
 			return nil, errors.New("x509: wrong KEM identifier")
 		}
+		return pub, nil
+	case AES256ECDSA:
+		pub := new(wrap.PublicKey)
+		pub.WrappedPk = keyData.PublicKey.Bytes
 		return pub, nil
 	default:
 		if scheme := CirclSchemeByPublicKeyAlgorithm(algo); scheme != nil {
@@ -1786,6 +1801,7 @@ var (
 	oidExtensionAuthorityInfoAccess   = []int{1, 3, 6, 1, 5, 5, 7, 1, 1}
 	oidExtensionCRLNumber             = []int{2, 5, 29, 20}
 	oidExtensionDelegatedCredential   = []int{1, 3, 6, 1, 4, 1, 44363, 44}
+	oidExtensionCertPSK               = []int{1, 3, 6, 1, 4, 1, 44363, 45}  // CSR Extension to transmit the Cert PSK in the context of wrapped CSR's
 )
 
 var (
@@ -2852,6 +2868,204 @@ func CreateCertificateRequest(rand io.Reader, template *CertificateRequest, priv
 	})
 }
 
+// CreateWrappedCertificateRequest creates a new wrapped certificate request based on a
+// template. The following members of template are used:
+//
+//  - SignatureAlgorithm
+//  - Subject
+//  - DNSNames
+//  - EmailAddresses
+//  - IPAddresses
+//  - URIs
+//  - ExtraExtensions
+//  - Attributes (deprecated)
+//
+// priv is the private key to sign the CSR with, and the corresponding public
+// key will be wrapped and included in the CSR. It must implement crypto.Signer and its
+// Public() method must return a *rsa.PublicKey or a *ecdsa.PublicKey or a
+// ed25519.PublicKey. (A *rsa.PrivateKey, *ecdsa.PrivateKey or
+// ed25519.PrivateKey satisfies this.)
+//
+// The returned slice is the certificate request in DER encoding.
+func CreateWrappedCertificateRequest(rand io.Reader, template *CertificateRequest, priv interface{}, certPSK []byte) (csr []byte, err error) {
+	
+	certPSKExtension := pkix.Extension{
+		Id: oidExtensionCertPSK,
+		Critical: false,
+		Value: certPSK,
+	}
+
+	template.ExtraExtensions = append(template.ExtraExtensions, certPSKExtension)
+	
+	key, ok := priv.(crypto.Signer)
+	if !ok {
+		return nil, errors.New("x509: certificate private key does not implement crypto.Signer")
+	}
+
+	var hashFunc crypto.Hash
+	var sigAlgo pkix.AlgorithmIdentifier
+	hashFunc, sigAlgo, err = signingParamsForPublicKey(key.Public(), template.SignatureAlgorithm)
+	if err != nil {
+		return nil, err
+	}
+
+	var publicKeyBytes []byte
+	var publicKeyAlgorithm pkix.AlgorithmIdentifier
+	publicKeyBytes, publicKeyAlgorithm, err = marshalPublicKey(key.Public())
+	if err != nil {
+		return nil, err
+	}
+
+	publicKeyAlgorithm = pkix.AlgorithmIdentifier{Algorithm: oidPublicKeyAES256ECDSA}
+
+	// certPSK := []byte("ABCDEFGHIJKLMONPQRSTUVWXYZABCDEF")
+	wrappedPk, wrappedPKNonce, err := aes256Encrypt(publicKeyBytes, certPSK)
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Printf("Public Key Bytes (without wrap): %x\n\n", publicKeyBytes)
+	fmt.Printf("Wrapped PK Len: %d\n\n", len(wrappedPk))
+
+	wrappedPk = append(wrappedPk, wrappedPKNonce...)
+
+	extensions, err := buildCSRExtensions(template)
+	if err != nil {
+		return nil, err
+	}
+
+	// Make a copy of template.Attributes because we may alter it below.
+	attributes := make([]pkix.AttributeTypeAndValueSET, 0, len(template.Attributes))
+	for _, attr := range template.Attributes {
+		values := make([][]pkix.AttributeTypeAndValue, len(attr.Value))
+		copy(values, attr.Value)
+		attributes = append(attributes, pkix.AttributeTypeAndValueSET{
+			Type:  attr.Type,
+			Value: values,
+		})
+	}
+
+	extensionsAppended := false
+	if len(extensions) > 0 {
+		// Append the extensions to an existing attribute if possible.
+		for _, atvSet := range attributes {
+			if !atvSet.Type.Equal(oidExtensionRequest) || len(atvSet.Value) == 0 {
+				continue
+			}
+
+			// specifiedExtensions contains all the extensions that we
+			// found specified via template.Attributes.
+			specifiedExtensions := make(map[string]bool)
+
+			for _, atvs := range atvSet.Value {
+				for _, atv := range atvs {
+					specifiedExtensions[atv.Type.String()] = true
+				}
+			}
+
+			newValue := make([]pkix.AttributeTypeAndValue, 0, len(atvSet.Value[0])+len(extensions))
+			newValue = append(newValue, atvSet.Value[0]...)
+
+			for _, e := range extensions {
+				if specifiedExtensions[e.Id.String()] {
+					// Attributes already contained a value for
+					// this extension and it takes priority.
+					continue
+				}
+
+				newValue = append(newValue, pkix.AttributeTypeAndValue{
+					// There is no place for the critical
+					// flag in an AttributeTypeAndValue.
+					Type:  e.Id,
+					Value: e.Value,
+				})
+			}
+
+			atvSet.Value[0] = newValue
+			extensionsAppended = true
+			break
+		}
+	}
+
+	rawAttributes, err := newRawAttributes(attributes)
+	if err != nil {
+		return
+	}
+
+	// If not included in attributes, add a new attribute for the
+	// extensions.
+	if len(extensions) > 0 && !extensionsAppended {
+		attr := struct {
+			Type  asn1.ObjectIdentifier
+			Value [][]pkix.Extension `asn1:"set"`
+		}{
+			Type:  oidExtensionRequest,
+			Value: [][]pkix.Extension{extensions},
+		}
+
+		b, err := asn1.Marshal(attr)
+		if err != nil {
+			return nil, errors.New("x509: failed to serialise extensions attribute: " + err.Error())
+		}
+
+		var rawValue asn1.RawValue
+		if _, err := asn1.Unmarshal(b, &rawValue); err != nil {
+			return nil, err
+		}
+
+		rawAttributes = append(rawAttributes, rawValue)
+	}
+
+	asn1Subject := template.RawSubject
+	if len(asn1Subject) == 0 {
+		asn1Subject, err = asn1.Marshal(template.Subject.ToRDNSequence())
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	tbsCSR := tbsCertificateRequest{
+		Version: 0, // PKCS #10, RFC 2986
+		Subject: asn1.RawValue{FullBytes: asn1Subject},
+		PublicKey: publicKeyInfo{
+			Algorithm: publicKeyAlgorithm,
+			PublicKey: asn1.BitString{
+				Bytes:     wrappedPk,
+				BitLength: len(wrappedPk) * 8,
+			},
+		},
+		RawAttributes: rawAttributes,
+	}
+
+	tbsCSRContents, err := asn1.Marshal(tbsCSR)
+	if err != nil {
+		return
+	}
+	tbsCSR.Raw = tbsCSRContents
+
+	signed := tbsCSRContents
+	if hashFunc != 0 {
+		h := hashFunc.New()
+		h.Write(signed)
+		signed = h.Sum(nil)
+	}
+
+	var signature []byte
+	signature, err = key.Sign(rand, signed, hashFunc)
+	if err != nil { 	
+		return
+	}
+
+	return asn1.Marshal(certificateRequest{
+		TBSCSR:             tbsCSR,
+		SignatureAlgorithm: sigAlgo,
+		SignatureValue: asn1.BitString{
+			Bytes:     signature,
+			BitLength: len(signature) * 8,
+		},
+	})
+}
+
 // ParseCertificateRequest parses a single certificate request from the
 // given ASN.1 DER data.
 func ParseCertificateRequest(asn1Data []byte) (*CertificateRequest, error) {
@@ -2909,6 +3123,12 @@ func parseCertificateRequest(in *certificateRequest) (*CertificateRequest, error
 			if err != nil {
 				return nil, err
 			}
+		}
+	}
+
+	for _, v := range out.Extensions {
+		if v.Id.Equal(oidExtensionCertPSK) {
+			fmt.Printf("CertPSK from CSR Extension:\n%x\n\n", v.Value)
 		}
 	}
 
@@ -3056,4 +3276,211 @@ func CreateRevocationList(rand io.Reader, template *RevocationList, issuer *Cert
 		SignatureAlgorithm: signatureAlgorithm,
 		SignatureValue:     asn1.BitString{Bytes: signature, BitLength: len(signature) * 8},
 	})
+}
+
+func aes256Encrypt(plaintext, key []byte) (ciphertext, nonce []byte, err error) {
+
+	if len(key) != 32 {
+		return nil, nil, errors.New("wrapped cert: key should be 32 bytes long")
+	}
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	nonce = make([]byte, 12)
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return nil, nil, err
+	}
+
+	aesgcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	ciphertext = aesgcm.Seal(nil, nonce, plaintext, nil)
+	return ciphertext, nonce, nil
+}
+
+// CreateCertificate creates a new X.509v3 certificate based on a template.
+// The following members of template are used:
+//
+//  - AuthorityKeyId
+//  - BasicConstraintsValid
+//  - CRLDistributionPoints
+//  - DNSNames
+//  - EmailAddresses
+//  - ExcludedDNSDomains
+//  - ExcludedEmailAddresses
+//  - ExcludedIPRanges
+//  - ExcludedURIDomains
+//  - ExtKeyUsage
+//  - ExtraExtensions
+//  - IPAddresses
+//  - IsCA
+//  - AllowDC
+//  - IssuingCertificateURL
+//  - KeyUsage
+//  - MaxPathLen
+//  - MaxPathLenZero
+//  - NotAfter
+//  - NotBefore
+//  - OCSPServer
+//  - PermittedDNSDomains
+//  - PermittedDNSDomainsCritical
+//  - PermittedEmailAddresses
+//  - PermittedIPRanges
+//  - PermittedURIDomains
+//  - PolicyIdentifiers
+//  - SerialNumber
+//  - SignatureAlgorithm
+//  - Subject
+//  - SubjectKeyId
+//  - URIs
+//  - UnknownExtKeyUsage
+//
+// The certificate is signed by parent. If parent is equal to template then the
+// certificate is self-signed. The parameter pub is the public key of the
+// signee and priv is the private key of the signer.
+//
+// The returned slice is the certificate in DER encoding.
+//
+// The currently supported key types are *rsa.PublicKey, *ecdsa.PublicKey and
+// ed25519.PublicKey. pub must be a supported key type, and priv must be a
+// crypto.Signer with a supported public key.
+//
+// The AuthorityKeyId will be taken from the SubjectKeyId of parent, if any,
+// unless the resulting certificate is self-signed. Otherwise the value from
+// template will be used.
+//
+// If SubjectKeyId from template is empty and the template is a CA, SubjectKeyId
+// will be generated from the hash of the public key.
+func CreateWrappedCertificate(rand io.Reader, template, parent *Certificate, pub, priv interface{}, certPSK []byte) (cert []byte, err error) {
+	key, ok := priv.(crypto.Signer)
+	if !ok {
+		return nil, errors.New("x509: certificate private key does not implement crypto.Signer")
+	}
+
+	if template.SerialNumber == nil {
+		return nil, errors.New("x509: no SerialNumber given")
+	}
+
+	if template.BasicConstraintsValid && !template.IsCA && template.MaxPathLen != -1 && (template.MaxPathLen != 0 || template.MaxPathLenZero) {
+		return nil, errors.New("x509: only CAs are allowed to specify MaxPathLen")
+	}
+
+	hashFunc, signatureAlgorithm, err := signingParamsForPublicKey(key.Public(), template.SignatureAlgorithm)
+	if err != nil {
+		return nil, err
+	}
+
+	publicKeyBytes, publicKeyAlgorithm, err := marshalPublicKey(pub)
+	if err != nil {
+		return nil, err
+	}
+	
+	wrappedPk, wrappedPKNonce, err := aes256Encrypt(publicKeyBytes, certPSK)
+	if err != nil {
+		return nil, err
+	}
+
+	wrappedPk = append(wrappedPk, wrappedPKNonce...)
+	
+	asn1Issuer, err := subjectBytes(parent)
+	if err != nil {
+		return
+	}
+
+	asn1Subject, err := subjectBytes(template)
+	if err != nil {
+		return
+	}
+
+	authorityKeyId := template.AuthorityKeyId
+	if !bytes.Equal(asn1Issuer, asn1Subject) && len(parent.SubjectKeyId) > 0 {
+		authorityKeyId = parent.SubjectKeyId
+	}
+
+	subjectKeyId := template.SubjectKeyId
+	if len(subjectKeyId) == 0 && template.IsCA {
+		// SubjectKeyId generated using method 1 in RFC 5280, Section 4.2.1.2:
+		//   (1) The keyIdentifier is composed of the 160-bit SHA-1 hash of the
+		//   value of the BIT STRING subjectPublicKey (excluding the tag,
+		//   length, and number of unused bits).
+		h := sha1.Sum(publicKeyBytes)
+		subjectKeyId = h[:]
+	}
+
+	extensions, err := buildCertExtensions(template, bytes.Equal(asn1Subject, emptyASN1Subject), authorityKeyId, subjectKeyId)
+	if err != nil {
+		return
+	}
+
+	encodedPublicKey := asn1.BitString{BitLength: len(wrappedPk) * 8, Bytes: wrappedPk}
+	c := tbsCertificate{
+		Version:            2,
+		SerialNumber:       template.SerialNumber,
+		SignatureAlgorithm: signatureAlgorithm,
+		Issuer:             asn1.RawValue{FullBytes: asn1Issuer},
+		Validity:           validity{template.NotBefore.UTC(), template.NotAfter.UTC()},
+		Subject:            asn1.RawValue{FullBytes: asn1Subject},
+		PublicKey:          publicKeyInfo{nil, publicKeyAlgorithm, encodedPublicKey},
+		Extensions:         extensions,
+	}
+
+	tbsCertContents, err := asn1.Marshal(c)
+	if err != nil {
+		return
+	}
+	c.Raw = tbsCertContents
+
+	signed := tbsCertContents
+	if hashFunc != 0 {
+		h := hashFunc.New()
+		h.Write(signed)
+		signed = h.Sum(nil)
+	}
+
+	var signerOpts crypto.SignerOpts = hashFunc
+	if template.SignatureAlgorithm != 0 && template.SignatureAlgorithm.isRSAPSS() {
+		signerOpts = &rsa.PSSOptions{
+			SaltLength: rsa.PSSSaltLengthEqualsHash,
+			Hash:       hashFunc,
+		}
+	}
+
+	var signature []byte
+	signature, err = key.Sign(rand, signed, signerOpts)
+	if err != nil {
+		return
+	}
+
+	wrappedSignature, wrappedSignatureNonce, err := aes256Encrypt(signature, certPSK)
+	if err != nil {
+		return nil, err
+	}
+
+	wrappedSignature = append(wrappedSignature, wrappedSignatureNonce...)
+
+	signedCert, err := asn1.Marshal(certificate{
+		nil,
+		c,
+		signatureAlgorithm,
+		asn1.BitString{Bytes: wrappedSignature, BitLength: len(wrappedSignature) * 8},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Check the signature to ensure the crypto.Signer behaved correctly.
+	// We skip this check if the signature algorithm is MD5WithRSA as we
+	// only support this algorithm for signing, and not verification.
+	if sigAlg := getSignatureAlgorithmFromAI(signatureAlgorithm); sigAlg != MD5WithRSA {
+		if err := checkSignature(sigAlg, c.Raw, signature, key.Public()); err != nil {
+			return nil, fmt.Errorf("x509: signature over certificate returned by signer is invalid: %w", err)
+		}
+	}
+
+	return signedCert, nil
 }
