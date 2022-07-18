@@ -1040,9 +1040,12 @@ type Config struct {
 	// connection.
 	ECHEnabled bool
 
-	// CertPSKEnabled determines whether the cert_psk extension is enabled for this
+	// WrappedCertEnabled determines whether the Wrapped Cert implementation is enabled for this
 	// connection.
 	WrappedCertEnabled bool
+
+	// WrappedCertsDir is the directory where the Wrapped Certificates are stored
+	WrappedCertsDir string
 
 	// ClientECHConfigs are the parameters used by the client when it offers the
 	// ECH extension. If ECH is enabled, a suitable configuration is found, and

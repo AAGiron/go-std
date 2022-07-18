@@ -13,6 +13,7 @@ import (
 	"crypto/liboqs_sig"
 	"crypto/rsa"
 	"crypto/subtle"
+	"crypto/wrap"
 	"crypto/x509"
 	"encoding/csv"
 	"encoding/hex"
@@ -331,6 +332,32 @@ func (c *Conn) clientHandshake() (err error) {
 		c.config = defaultConfig()
 	}
 
+	var pskLabel, certPSK []byte
+	var certPSKExt certPSKExtension
+
+	if c.config.WrappedCertEnabled {
+		pskLabel, certPSK, err = loadCertPSK(c.conn.RemoteAddr().String())
+		if err != nil {
+			return err
+		}
+
+		if pskLabel == nil {
+			fmt.Println("Couldn't find the Cert PSK. Establishing a PSK")
+			certPSKExt = certPSKExtension{
+				establishPSK: true,				
+			}
+		} else {
+			certPSKExt = certPSKExtension{
+				establishPSK: false,
+				identities: [][]byte{pskLabel},
+			}
+
+			fmt.Printf("Client: Recovered Label:\n%x\n\n", pskLabel)
+			fmt.Printf("Client: Recovered PSK:\n%x\n\n", certPSK)
+			fmt.Printf("Client: Sending PSK label\n\n")
+		}		
+	}
+
 	handshakeTimings := createTLS13ClientHandshakeTimingInfo(c.config.Time)
 	c.clientHandshakeSizes = TLS13ClientHandshakeSizes{}
 
@@ -363,29 +390,8 @@ func (c *Conn) clientHandshake() (err error) {
 
 	cacheKey, session, earlySecret, binderKey := c.loadSession(helloResumed)
 
-	var pskLabel, psk []byte
-
 	if c.config.WrappedCertEnabled {
-		pskLabel, psk, err = loadCertPSK(c.conn.RemoteAddr().String())
-		if err != nil {
-			return err
-		}
-
-		if pskLabel == nil {
-			fmt.Println("Couldn't find the Cert PSK. Establishing a PSK")
-			hello.certPSK = certPSKExtension{
-				establishPSK: true,				
-			}
-		} else {
-			hello.certPSK = certPSKExtension{
-				establishPSK: false,
-				identities: [][]byte{pskLabel},
-			}
-
-			fmt.Printf("Client: Recovered Label:\n%x\n\n", pskLabel)
-			fmt.Printf("Client: Recovered PSK:\n%x\n\n", psk)
-			fmt.Printf("Client: Sending PSK label\n\n")
-		}		
+		hello.certPSK = certPSKExt
 	}
 
 	if cacheKey != "" && session != nil {
@@ -452,6 +458,7 @@ func (c *Conn) clientHandshake() (err error) {
 			handshakeTimings: handshakeTimings,
 			ssKEMTLS:         ssKEMTLS,
 			pdkKEMTLS:        hello.pdkKEMTLS,
+			certPSK:          certPSK,
 		}
 
 		// In TLS 1.3, session tickets are delivered after the handshake.
@@ -1105,7 +1112,7 @@ func (c *Conn) verifyServerCertificate(certificates [][]byte) error {
 	}
 
 	switch certs[0].PublicKey.(type) {
-	case *rsa.PublicKey, *ecdsa.PublicKey, ed25519.PublicKey, circlSign.PublicKey, *kem.PublicKey, *liboqs_sig.PublicKey:
+	case *rsa.PublicKey, *ecdsa.PublicKey, ed25519.PublicKey, circlSign.PublicKey, *kem.PublicKey, *liboqs_sig.PublicKey, *wrap.PublicKey:
 		break
 	default:
 		c.sendAlert(alertUnsupportedCertificate)

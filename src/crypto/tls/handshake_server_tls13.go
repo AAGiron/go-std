@@ -11,10 +11,13 @@ import (
 	"crypto/kem"
 	"crypto/rand"
 	"crypto/rsa"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"hash"
 	"io"
+	"os"
+	"path/filepath"
 	"sync/atomic"
 	"time"
 )
@@ -54,6 +57,8 @@ type serverHandshakeStateTLS13 struct {
 
 	certPSK         []byte
 	handshakeTimings CFEventTLS13ServerHandshakeTimingInfo
+
+	WrappedCertsDB map[string]Certificate
 }
 
 // processDelegatedCredentialFromClient unmarshals the DelegatedCredential
@@ -346,23 +351,6 @@ func (hs *serverHandshakeStateTLS13) processClientHello() error {
 		c.sendAlert(alertInternalError)
 		return err
 	}
-
-	if len(hs.clientHello.certPSK.identities) > 0 {
-		// var err error
-		// identitiesLen := len(hs.clientHello.certPSK.identities)
-
-		// for i := 0; i < identitiesLen; i++ {
-		// 	hs.certPSK, err = loadWrappedCert(hs.clientHello.certPSK.identities[0])			
-		// 	if err != nil {
-		// 		return err
-		// 	}
-		// 	if hs.certPSK != nil {
-		// 		break
-		// 	}
-		// }							
-	}
-		
-		// fmt.Printf("Server: Received PSK:\n%x\n\n", hs.certPSK)
 
 	if hs.clientHello.echIsInner {
 		// If confirming ECH acceptance, then clear the last 8 bytes of the
@@ -704,14 +692,25 @@ func (hs *serverHandshakeStateTLS13) pickCertificate() error {
 		return c.sendAlert(alertMissingExtension)
 	}
 
-	certificate, err := c.config.getCertificate(clientHelloInfo(c, hs.clientHello))
-	if err != nil {
-		if err == errNoCertificates {
-			c.sendAlert(alertUnrecognizedName)
-		} else {
-			c.sendAlert(alertInternalError)
+	var certificate *Certificate	
+	var err error
+
+	if c.config.WrappedCertEnabled && (len(hs.clientHello.certPSK.identities) > 0) {
+		certificate = new(Certificate)
+
+		encodedIdentity := hex.EncodeToString(hs.clientHello.certPSK.identities[0])
+		// JP: TODO: How to proceed when the client send multiple identities		
+		*certificate = hs.WrappedCertsDB[encodedIdentity]
+	} else {
+		certificate, err = c.config.getCertificate(clientHelloInfo(c, hs.clientHello))
+		if err != nil {
+			if err == errNoCertificates {
+				c.sendAlert(alertUnrecognizedName)
+			} else {
+				c.sendAlert(alertInternalError)
+			}
+			return err
 		}
-		return err
 	}
 
 	hs.sigAlg, err = selectSignatureScheme(c.vers, certificate, hs.clientHello.supportedSignatureAlgorithms)
@@ -1530,42 +1529,35 @@ func (hs *serverHandshakeStateTLS13) readClientFinished() error {
 	return nil
 }
 
-// func loadWrappedCert(label []byte) (wrappedCert x509.Certificate, err error) {
-// 	encodedLabel := hex.EncodeToString(label)
 
-// 	fileName := ".csv"
-
-// 	csvFile, err := os.Open(fileName)
-// 	if err != nil {
-// 		return nil, err
-// 	}
+func (hs *serverHandshakeStateTLS13) loadAllWrappedCerts() error {
 	
-// 	defer csvFile.Close()
+	wrappedCertsDir := hs.c.config.WrappedCertsDir
+	serverDomain := "teste"
 
-// 	// read csv values using csv.Reader
-// 	csvReader := csv.NewReader(csvFile)
-	
-// 	for {
-// 		rec, err := csvReader.Read()
-		
-// 		if err == io.EOF {
-// 				break
-// 		}
-		
-// 		if err != nil {
-// 				return nil, nil, err
-// 		}
+	file, err := os.Open(wrappedCertsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
 
-// 		if rec[0] == encodedLabel {
-// 			certBytes, err = hex.DecodeString(rec[1])
-// 			if err != nil {
-// 				return nil, err
-// 			}
+	defer file.Close()
 
-						
-// 			return 
-// 		}
-// 	}
+	list, err := file.Readdirnames(0) // 0 to read all files and folders
+	if err != nil {
+		return err
+	}
 
-// 	return nil, nil
-// }
+	for _, dirName := range list {
+		loadedCert, err := LoadX509KeyPair(filepath.Join(wrappedCertsDir, dirName, serverDomain+".crt"), filepath.Join(wrappedCertsDir, dirName, serverDomain+".key"))
+		if err != nil {
+			return err
+		}
+
+		hs.WrappedCertsDB[dirName] = loadedCert		
+	}
+
+	return nil
+}
