@@ -2919,7 +2919,7 @@ func CreateWrappedCertificateRequest(rand io.Reader, template *CertificateReques
 	publicKeyAlgorithm = pkix.AlgorithmIdentifier{Algorithm: oidPublicKeyAES256ECDSA}
 
 	// certPSK := []byte("ABCDEFGHIJKLMONPQRSTUVWXYZABCDEF")
-	wrappedPk, wrappedPKNonce, err := aes256Encrypt(publicKeyBytes, certPSK)
+	wrappedPk, wrappedPKNonce, err := AES256Encrypt(publicKeyBytes, certPSK)
 	if err != nil {
 		return nil, err
 	}
@@ -3278,7 +3278,7 @@ func CreateRevocationList(rand io.Reader, template *RevocationList, issuer *Cert
 	})
 }
 
-func aes256Encrypt(plaintext, key []byte) (ciphertext, nonce []byte, err error) {
+func AES256Encrypt(plaintext, key []byte) (ciphertext, nonce []byte, err error) {
 
 	if len(key) != 32 {
 		return nil, nil, errors.New("wrapped cert: key should be 32 bytes long")
@@ -3380,7 +3380,7 @@ func CreateWrappedCertificate(rand io.Reader, template, parent *Certificate, pub
 		return nil, err
 	}
 	
-	wrappedPk, wrappedPKNonce, err := aes256Encrypt(publicKeyBytes, certPSK)
+	wrappedPk, wrappedPKNonce, err := AES256Encrypt(publicKeyBytes, certPSK)
 	if err != nil {
 		return nil, err
 	}
@@ -3456,7 +3456,7 @@ func CreateWrappedCertificate(rand io.Reader, template, parent *Certificate, pub
 		return
 	}
 
-	wrappedSignature, wrappedSignatureNonce, err := aes256Encrypt(signature, certPSK)
+	wrappedSignature, wrappedSignatureNonce, err := AES256Encrypt(signature, certPSK)
 	if err != nil {
 		return nil, err
 	}

@@ -1183,6 +1183,27 @@ func (c *Conn) handleNewCertPSK(msg *newCertPSKMsgTLS13) error {
 	return nil
 }
 
+func AES256Decrypt(ciphertext, nonce, key []byte) (plaintext []byte, err error) {
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+
+	aesgcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+
+	plaintext, err = aesgcm.Open(nil, nonce, ciphertext, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return plaintext, nil
+}
+
+
 func (hs *clientHandshakeStateTLS13) abortIfRequired() error {
 	c := hs.c
 	if c.ech.offered && !c.ech.accepted {
