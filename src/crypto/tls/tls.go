@@ -419,7 +419,7 @@ func X509KeyPair(certPEMBlock, keyPEMBlock []byte) (Certificate, error) {
 			return fail(errors.New("tls: private key does not match public key"))
 		}
 	case *wrap.PublicKey:
-		fmt.Println("Wrapped Public Key")
+		// empty statement
 	default:
 		return fail(errors.New("tls: unknown public key algorithm"))
 	}

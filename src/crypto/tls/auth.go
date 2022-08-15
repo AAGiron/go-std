@@ -306,6 +306,7 @@ func signatureSchemesForCertificate(version uint16, cert *Certificate) []Signatu
 		case liboqs_sig.PublicKey:
 			sigAlgs = []SignatureScheme{liboqsSigSignatureSchemeMap[pub.SigId]}
 		case *wrap.PublicKey:
+			fmt.Printf("Certificate has a wrapped public key\n\n")  // HS Prints
 			switch pub.ClassicAlgorithm {
 			case elliptic.P256():
 				sigAlgs = []SignatureScheme{ECDSAWithP256AndSHA256}

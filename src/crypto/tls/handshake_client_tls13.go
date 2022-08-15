@@ -1157,15 +1157,13 @@ func (c *Conn) handleNewSessionTicket(msg *newSessionTicketMsgTLS13) error {
 }
 
 func (c *Conn) handleNewCertPSK(msg *newCertPSKMsgTLS13) error {
+	fmt.Printf("Client is handling a NewCertPSK message\n\nComputing the Cert PSK...\n\n")
+	
 	if !c.isClient {
 		c.sendAlert(alertUnexpectedMessage)
 		return errors.New("tls: received new session ticket from a client")
 	}
 
-	// if c.config.SessionTicketsDisabled || c.config.ClientSessionCache == nil || c.config.ECHEnabled {
-	// 	return nil
-	// }
-	
 	cipherSuite := cipherSuiteTLS13ByID(c.cipherSuite)
 	if cipherSuite == nil {
 		return c.sendAlert(alertInternalError)
@@ -1175,9 +1173,8 @@ func (c *Conn) handleNewCertPSK(msg *newCertPSKMsgTLS13) error {
 	psk := cipherSuite.expandLabel(c.certPSKMasterSecret, "cert psk",
 		msg.nonce, cipherSuite.hash.Size())
 
-	fmt.Printf("Label:\n%x\n\n", msg.label)
-	fmt.Printf("Nonce:\n%x\n\n", msg.nonce)
-	fmt.Printf("PSK:\n%x\n\n", psk)
+	fmt.Printf("Cert PSK info:\n\n")
+	fmt.Printf("   Label (received from the server):\n%x\n   Generated with nonce (received from the server):\n%x\n   Cert PSK:\n%x\n\n", msg.label, msg.nonce, psk)	
 
 	if err := certPSKWriteToFile(c.conn.RemoteAddr().String(), msg.label, psk, true); err != nil {
 		return err

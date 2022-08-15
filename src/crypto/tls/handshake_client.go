@@ -336,25 +336,26 @@ func (c *Conn) clientHandshake() (err error) {
 	var certPSKExt certPSKExtension
 
 	if c.config.WrappedCertEnabled {
+		fmt.Printf("Wrapped Certificate Proposal is enabled\n\n")  // HS Prints
 		pskLabel, certPSK, err = loadCertPSK(c.conn.RemoteAddr().String())
 		if err != nil {
 			return err
 		}
 
-		if pskLabel == nil {
-			fmt.Println("Couldn't find the Cert PSK. Establishing a PSK")
+		if pskLabel == nil {			
+			fmt.Printf("Client does not have an agreed Cert PSK with this server.\nClient is goint to establish a Cert PSK in this Handshake\n\n")  // HS Prints
 			certPSKExt = certPSKExtension{
 				establishPSK: true,				
 			}
-		} else {
+		} else {			
+			fmt.Printf("Client does have an agreed Cert PSK with this server:\n\nCert PSK info:\n")  // HS Prints
 			certPSKExt = certPSKExtension{
 				establishPSK: false,
 				identities: [][]byte{pskLabel},
 			}
 
-			fmt.Printf("Client: Recovered Label:\n%x\n\n", pskLabel)
-			fmt.Printf("Client: Recovered PSK:\n%x\n\n", certPSK)
-			fmt.Printf("Client: Sending PSK label\n\n")
+			fmt.Printf("Cert PSK info:\n   Label: %x\n   Cert PSK: %x\n\n", pskLabel, certPSK)  // HS Prints
+			fmt.Printf("Client will send the PSK label in his ClientHello\n\n")  // HS Prints
 		}		
 	}
 
