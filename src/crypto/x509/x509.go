@@ -126,7 +126,13 @@ func marshalPublicKey(pub interface{}) (publicKeyBytes []byte, publicKeyAlgorith
 		publicKeyAlgorithm.Algorithm = oidPublicKeyPQTLS  
 	case *wrap.PublicKey:
 		publicKeyBytes = pub.WrappedPk
-		publicKeyAlgorithm.Algorithm = oidPublicKeyAES256ECDSA	
+
+		 wrappedOID := ecToWrappedOID(pub.ClassicAlgorithm)
+		 if wrappedOID == nil {
+			return nil, pkix.AlgorithmIdentifier{}, fmt.Errorf("x509: unsupported public key type: %T", pub)
+		 }
+
+		publicKeyAlgorithm.Algorithm = wrappedOID		
 	default:
 		return nil, pkix.AlgorithmIdentifier{}, fmt.Errorf("x509: unsupported public key type: %T", pub)
 	}
@@ -529,7 +535,9 @@ var (
 	oidPublicKeyEdDilithium4 = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 10} // Cloudflare OID
 	oidPublicKeyKEMTLS       = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 11} // Cloudflare OID
 	oidPublicKeyPQTLS       = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 12}
-	oidPublicKeyAES256ECDSA  = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 13}
+	oidPublicKeyAES256P256  = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 13}
+	oidPublicKeyAES256P384  = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 14}
+	oidPublicKeyAES256P521  = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 15}
 )
 
 func getPublicKeyAlgorithmFromOID(oid asn1.ObjectIdentifier) PublicKeyAlgorithm {
@@ -552,7 +560,7 @@ func getPublicKeyAlgorithmFromOID(oid asn1.ObjectIdentifier) PublicKeyAlgorithm 
 		return KEMTLS
 	case oid.Equal(oidPublicKeyPQTLS):
 		return PQTLS
-	case oid.Equal(oidPublicKeyAES256ECDSA):
+	case oid.Equal(oidPublicKeyAES256P256) || oid.Equal(oidPublicKeyAES256P384) || oid.Equal(oidPublicKeyAES256P521):
 		return AES256ECDSA
 	default:
 		scheme := circlPki.SchemeByOid(oid)
@@ -1048,6 +1056,9 @@ type distributionPointName struct {
 	RelativeName pkix.RDNSequence `asn1:"optional,tag:1"`
 }
 
+func ParsePublicKey(algo PublicKeyAlgorithm, keyData *publicKeyInfo) (interface{}, error) {
+	return parsePublicKey(algo, keyData)
+}
 func parsePublicKey(algo PublicKeyAlgorithm, keyData *publicKeyInfo) (interface{}, error) {
 	asn1Data := keyData.PublicKey.RightAlign()
 	switch algo {
@@ -1162,6 +1173,16 @@ func parsePublicKey(algo PublicKeyAlgorithm, keyData *publicKeyInfo) (interface{
 	case AES256ECDSA:
 		pub := new(wrap.PublicKey)
 		pub.WrappedPk = keyData.PublicKey.Bytes
+		
+		switch  {
+		case keyData.Algorithm.Algorithm.Equal(oidPublicKeyAES256P256):
+			pub.ClassicAlgorithm = elliptic.P256()
+		case keyData.Algorithm.Algorithm.Equal(oidPublicKeyAES256P384):
+			pub.ClassicAlgorithm = elliptic.P384()
+		case keyData.Algorithm.Algorithm.Equal(oidPublicKeyAES256P521):
+			pub.ClassicAlgorithm = elliptic.P521()
+		}
+		
 		return pub, nil
 	default:
 		if scheme := CirclSchemeByPublicKeyAlgorithm(algo); scheme != nil {
@@ -2915,10 +2936,17 @@ func CreateWrappedCertificateRequest(rand io.Reader, template *CertificateReques
 	if err != nil {
 		return nil, err
 	}
+	if pubKey, ok := key.Public().(*ecdsa.PublicKey); ok {
+		wrappedOID := ecToWrappedOID(pubKey.Curve)
+		if wrappedOID == nil {
+			return nil, errors.New("unsupported elliptic curve for wrapped key")
+		}
 
-	publicKeyAlgorithm = pkix.AlgorithmIdentifier{Algorithm: oidPublicKeyAES256ECDSA}
+		publicKeyAlgorithm.Algorithm = wrappedOID		
+	} else {
+		return nil, errors.New("only ECDSA is supported for Wrapped CSR")
+	}
 
-	// certPSK := []byte("ABCDEFGHIJKLMONPQRSTUVWXYZABCDEF")
 	wrappedPk, wrappedPKNonce, err := AES256Encrypt(publicKeyBytes, certPSK)
 	if err != nil {
 		return nil, err
@@ -3483,4 +3511,17 @@ func CreateWrappedCertificate(rand io.Reader, template, parent *Certificate, pub
 	}
 
 	return signedCert, nil
+}
+
+func ecToWrappedOID(ec elliptic.Curve) asn1.ObjectIdentifier {
+	switch ec {
+	case elliptic.P256():
+		return oidPublicKeyAES256P256
+	case elliptic.P384():
+		return oidPublicKeyAES256P384
+	case elliptic.P521():
+		return oidPublicKeyAES256P521
+	default:
+		return nil
+	}
 }
