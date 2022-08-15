@@ -7,10 +7,15 @@ package tls
 import (
 	"bytes"
 	"crypto"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/hmac"
 	"crypto/kem"
 	"crypto/liboqs_sig"
 	"crypto/rsa"
+	"crypto/wrap"
 	"crypto/x509"
 	"errors"
 	"fmt"
@@ -50,6 +55,8 @@ type clientHandshakeStateTLS13 struct {
 	trafficSecret   []byte // client_application_traffic_secret_0
 
 	handshakeTimings CFEventTLS13ClientHandshakeTimingInfo
+
+	certPSK         []byte
 }
 
 // processDelegatedCredentialFromServer unmarshals the DelegatedCredential
@@ -812,6 +819,28 @@ func (hs *clientHandshakeStateTLS13) readServerCertificate() error {
 		pk := c.peerCertificates[0].PublicKey
 		if c.verifiedDC != nil {
 			pk = c.verifiedDC.cred.publicKey
+		}
+
+		if hs.c.config.WrappedCertEnabled && len(hs.hello.certPSK.identities) > 0 {
+			fmt.Printf("Reading Server Wrapped Certificate\n\n")
+			wrappedPub, ok := pk.(*wrap.PublicKey)
+			if ok {
+				wrappedPk := wrappedPub.WrappedPk[0:81]
+				nonce := wrappedPub.WrappedPk[81:]
+
+				unwrappedPk, err := AES256Decrypt(wrappedPk, nonce, hs.certPSK)
+				if err != nil {
+					return err
+				}
+
+				x, y := elliptic.Unmarshal(elliptic.P256(), unwrappedPk)
+
+				pk = &ecdsa.PublicKey{
+					Curve: elliptic.P256(),
+					X:     x,
+					Y:     y,
+				}
+			}			
 		}
 
 		signed := signedMessage(sigHash, serverSignatureContext, hs.transcript)

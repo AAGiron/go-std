@@ -2063,24 +2063,6 @@ func certPSKWriteToFile(peerIP string, pskLabelBytes, pskBytes []byte, isClient 
 
 	defer csvFile.Close()
 
-	csvReader := csv.NewReader(csvFile)
-	
-	for {
-		rec, err := csvReader.Read()
-		
-		if err == io.EOF {
-				break
-		}
-		
-		if err != nil {
-				return err
-		}
-
-		if rec[0] == peerIP {  // If there is already a PSK established for this peer, do not add a new one
-			return  nil
-		}
-	}
-
 	csvwriter := csv.NewWriter(csvFile)
 
 	var rec []string
