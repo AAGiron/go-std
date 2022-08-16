@@ -3091,6 +3091,44 @@ func CreateWrappedCertificateRequest(rand io.Reader, template *CertificateReques
 	})
 }
 
+func VerifyWrappedCSRSignature(csr *CertificateRequest) (bool, error) {	
+	wrappedPub, ok := csr.PublicKey.(*wrap.PublicKey)
+	
+	if ok {
+		var certPSK []byte
+
+		wrappedPk := wrappedPub.WrappedPk[0:81]
+		nonce := wrappedPub.WrappedPk[81:]
+
+		for i := 0; i < len(csr.Extensions) ; i++ {		
+			if csr.Extensions[i].Id.Equal(oidExtensionCertPSK) {
+				certPSK = csr.Extensions[i].Value
+			}
+		}
+	
+		unwrappedPkBytes, err := wrap.AES256Decrypt(wrappedPk, nonce, certPSK)
+		if err != nil {
+			return false, err
+		}
+
+		x, y := elliptic.Unmarshal(wrappedPub.ClassicAlgorithm, unwrappedPkBytes)
+
+		unwrappedPk := &ecdsa.PublicKey{
+			Curve: wrappedPub.ClassicAlgorithm,
+			X:     x,
+			Y:     y,
+		}
+
+		if err := checkSignature(csr.SignatureAlgorithm, csr.RawTBSCertificateRequest, csr.Signature, unwrappedPk); err != nil {
+			return false, err
+		}
+
+		return true, nil
+	} else {
+		return false, errors.New("CSR's public key is not a wrapped public key")
+	}
+}
+
 // ParseCertificateRequest parses a single certificate request from the
 // given ASN.1 DER data.
 func ParseCertificateRequest(asn1Data []byte) (*CertificateRequest, error) {
