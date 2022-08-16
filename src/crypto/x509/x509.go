@@ -8,14 +8,11 @@ package x509
 import (
 	"bytes"
 	"crypto"
-	"crypto/aes"
-	"crypto/cipher"
 	"crypto/dsa"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/kem"
-	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha1"
 	"crypto/x509/pkix"
@@ -2947,7 +2944,7 @@ func CreateWrappedCertificateRequest(rand io.Reader, template *CertificateReques
 		return nil, errors.New("only ECDSA is supported for Wrapped CSR")
 	}
 
-	wrappedPk, wrappedPKNonce, err := AES256Encrypt(publicKeyBytes, certPSK)
+	wrappedPk, wrappedPKNonce, err := wrap.AES256Encrypt(publicKeyBytes, certPSK)
 	if err != nil {
 		return nil, err
 	}
@@ -3306,31 +3303,6 @@ func CreateRevocationList(rand io.Reader, template *RevocationList, issuer *Cert
 	})
 }
 
-func AES256Encrypt(plaintext, key []byte) (ciphertext, nonce []byte, err error) {
-
-	if len(key) != 32 {
-		return nil, nil, errors.New("wrapped cert: key should be 32 bytes long")
-	}
-
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		panic(err.Error())
-	}
-
-	nonce = make([]byte, 12)
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return nil, nil, err
-	}
-
-	aesgcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	ciphertext = aesgcm.Seal(nil, nonce, plaintext, nil)
-	return ciphertext, nonce, nil
-}
-
 // CreateCertificate creates a new X.509v3 certificate based on a template.
 // The following members of template are used:
 //
@@ -3408,7 +3380,7 @@ func CreateWrappedCertificate(rand io.Reader, template, parent *Certificate, pub
 		return nil, err
 	}
 	
-	wrappedPk, wrappedPKNonce, err := AES256Encrypt(publicKeyBytes, certPSK)
+	wrappedPk, wrappedPKNonce, err := wrap.AES256Encrypt(publicKeyBytes, certPSK)
 	if err != nil {
 		return nil, err
 	}
@@ -3484,7 +3456,7 @@ func CreateWrappedCertificate(rand io.Reader, template, parent *Certificate, pub
 		return
 	}
 
-	wrappedSignature, wrappedSignatureNonce, err := AES256Encrypt(signature, certPSK)
+	wrappedSignature, wrappedSignatureNonce, err := wrap.AES256Encrypt(signature, certPSK)
 	if err != nil {
 		return nil, err
 	}
