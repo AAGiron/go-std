@@ -821,8 +821,9 @@ func (hs *clientHandshakeStateTLS13) readServerCertificate() error {
 			pk = c.verifiedDC.cred.publicKey
 		}
 
-		if hs.c.config.WrappedCertEnabled && len(hs.hello.certPSK.identities) > 0 {
+		if hs.c.config.WrappedCertEnabled && len(hs.hello.certPSK.identities) > 0 && c.peerCertificates[0].PublicKeyAlgorithm == x509.AES256ECDSA {
 			fmt.Printf("Reading Server Wrapped Certificate\n\n")
+
 			wrappedPub, ok := pk.(*wrap.PublicKey)
 			if ok {
 				wrappedPk := wrappedPub.WrappedPk[0:81]
@@ -833,10 +834,10 @@ func (hs *clientHandshakeStateTLS13) readServerCertificate() error {
 					return err
 				}
 
-				x, y := elliptic.Unmarshal(elliptic.P256(), unwrappedPk)
+				x, y := elliptic.Unmarshal(wrappedPub.ClassicAlgorithm, unwrappedPk)
 
 				pk = &ecdsa.PublicKey{
-					Curve: elliptic.P256(),
+					Curve: wrappedPub.ClassicAlgorithm,
 					X:     x,
 					Y:     y,
 				}
