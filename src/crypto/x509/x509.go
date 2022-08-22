@@ -118,7 +118,7 @@ func marshalPublicKey(pub interface{}) (publicKeyBytes []byte, publicKeyAlgorith
 	case *kem.PublicKey:
 		publicKeyBytes, _ = pub.MarshalBinary()
 		publicKeyAlgorithm.Algorithm = oidPublicKeyKEMTLS
-	case *liboqs_sig.HybridPublicKey:
+	case *liboqs_sig.PublicKey:
 		publicKeyBytes = pub.MarshalBinary()				
 		publicKeyAlgorithm.Algorithm = oidPublicKeyPQTLS  
 	case *wrap.PublicKey:
@@ -978,7 +978,7 @@ func checkSignature(algo SignatureAlgorithm, signed, signature []byte, publicKey
 			return fmt.Errorf("x509: %s verification failed", scheme.Name())
 		}
 		return
-	case liboqs_sig.HybridPublicKey:
+	case liboqs_sig.PublicKey:
 		if pubKeyAlgo != PQTLS {
 			return signaturePublicKeyAlgoMismatchError(pubKeyAlgo, pub)
 		}
@@ -990,7 +990,7 @@ func checkSignature(algo SignatureAlgorithm, signed, signature []byte, publicKey
 
 		return
 
-	case *liboqs_sig.HybridPublicKey:
+	case *liboqs_sig.PublicKey:
 		if pubKeyAlgo != PQTLS {
 			return signaturePublicKeyAlgoMismatchError(pubKeyAlgo, pub)
 		}
@@ -1161,7 +1161,7 @@ func parsePublicKey(algo PublicKeyAlgorithm, keyData *publicKeyInfo) (interface{
 		}
 		return pub, nil
 	case PQTLS:
-		pub := new(liboqs_sig.HybridPublicKey)
+		pub := new(liboqs_sig.PublicKey)
 		err := pub.UnmarshalBinary(keyData.PublicKey.Bytes)
 		if err != nil {
 			return nil, errors.New("x509: wrong KEM identifier")
@@ -2261,7 +2261,7 @@ func signingParamsForPublicKey(pub interface{}, requestedSigAlgo SignatureAlgori
 			return
 		}
 		sigAlgo.Algorithm = certScheme.Oid()	
-	case liboqs_sig.HybridPublicKey:
+	case liboqs_sig.PublicKey:
 		pubType = PQTLS
 		sigAlgo.Algorithm = oidSignatureFromSigID[pub.SigId]
 		hashFunc, err = liboqs_sig.HashFromSig(pub.SigId)

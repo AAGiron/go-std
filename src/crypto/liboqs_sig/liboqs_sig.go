@@ -30,30 +30,30 @@ const (
 
 
 // Hybrid Signature public key
-type HybridPublicKey struct {
+type PublicKey struct {
 	SigId ID
 	classic *ecdsa.PublicKey 
 	pqc []byte
 }
 
 // Hybrid Signature private key
-type HybridPrivateKey struct {
+type PrivateKey struct {
 	SigId ID
 	classic *ecdsa.PrivateKey	
 	pqc []byte
-	hybridPub *HybridPublicKey
+	hybridPub *PublicKey
 }
 
 
 // Private Key methods
 // Implementing the crypto.Signer interface
 
-func (priv *HybridPrivateKey) Public() crypto.PublicKey {
+func (priv *PrivateKey) Public() crypto.PublicKey {
 	return *priv.hybridPub
 }
 
 
-func (priv *HybridPrivateKey) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) (signature []byte, err error) {
+func (priv *PrivateKey) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) (signature []byte, err error) {
 
 	classicSig, err := priv.classic.Sign(rand, digest, opts)
 	if err != nil {
@@ -84,7 +84,7 @@ func (priv *HybridPrivateKey) Sign(rand io.Reader, digest []byte, opts crypto.Si
 
 // Public Key methods
 
-func (pub *HybridPublicKey) MarshalBinary() ([]byte) {
+func (pub *PublicKey) MarshalBinary() ([]byte) {
 	var b cryptobyte.Builder
 	
 	classicPubBytes := elliptic.Marshal(pub.classic.Curve, pub.classic.X, pub.classic.Y)
@@ -96,7 +96,7 @@ func (pub *HybridPublicKey) MarshalBinary() ([]byte) {
 	return b.BytesOrPanic()
 }
 
-func (pub *HybridPublicKey) UnmarshalBinary(raw []byte) error {
+func (pub *PublicKey) UnmarshalBinary(raw []byte) error {
 
 	var classicPubSize int
 	
@@ -119,7 +119,7 @@ func (pub *HybridPublicKey) UnmarshalBinary(raw []byte) error {
 }
 
 
-func (pub *HybridPublicKey) Verify(signed, sig []byte) (bool, error) {
+func (pub *PublicKey) Verify(signed, sig []byte) (bool, error) {
 
 	classicSize := binary.BigEndian.Uint16(sig[:2])		
 	classicSig := sig[2:2 + classicSize]	
@@ -155,7 +155,7 @@ func (pub *HybridPublicKey) Verify(signed, sig []byte) (bool, error) {
 
 // Package Functions
 
-func GenerateKey(sigId ID) (*HybridPublicKey, *HybridPrivateKey, error) {
+func GenerateKey(sigId ID) (*PublicKey, *PrivateKey, error) {
 
 	curve, _ := ClassicFromSig(sigId)
 
@@ -184,8 +184,8 @@ func GenerateKey(sigId ID) (*HybridPublicKey, *HybridPrivateKey, error) {
 
 	// Hybrid Keypair
 
-	pub := new(HybridPublicKey)
-	priv := new(HybridPrivateKey)
+	pub := new(PublicKey)
+	priv := new(PrivateKey)
 
 	pub.SigId = sigId
 	pub.classic = classicPub
@@ -202,25 +202,25 @@ func GenerateKey(sigId ID) (*HybridPublicKey, *HybridPrivateKey, error) {
 
 // This function is only called in our tests.
 // Used in the unmarshalling of the hybrid root CA certificate and keys
-func ConstructPublicKey(_sigID ID, _classic *ecdsa.PublicKey, _pqc []byte) *HybridPublicKey {
-	return &HybridPublicKey{SigId: _sigID, classic: _classic, pqc: _pqc}
+func ConstructPublicKey(_sigID ID, _classic *ecdsa.PublicKey, _pqc []byte) *PublicKey {
+	return &PublicKey{SigId: _sigID, classic: _classic, pqc: _pqc}
 }
 
 // This function is only called in our tests.
 // Used in the unmarshalling of the hybrid root CA certificate and keys
-func ConstructPrivateKey(_sigID ID, _classic *ecdsa.PrivateKey, _pqc []byte, _hybridPub *HybridPublicKey) *HybridPrivateKey {
-	return &HybridPrivateKey{SigId: _sigID, classic: _classic, pqc: _pqc, hybridPub: _hybridPub}
+func ConstructPrivateKey(_sigID ID, _classic *ecdsa.PrivateKey, _pqc []byte, _hybridPub *PublicKey) *PrivateKey {
+	return &PrivateKey{SigId: _sigID, classic: _classic, pqc: _pqc, hybridPub: _hybridPub}
 }
 
 // This function is only called in our tests.
 // Used in the marshalling of the hybrid root CA certificate and keys
-func GetPrivateKeyMembers(priv *HybridPrivateKey) (*ecdsa.PrivateKey, []byte, *HybridPublicKey){
+func GetPrivateKeyMembers(priv *PrivateKey) (*ecdsa.PrivateKey, []byte, *PublicKey){
 	return priv.classic, priv.pqc, priv.hybridPub
 }
 
 // This function is only called in our tests.
 // Used in the marshalling of the hybrid root CA certificate and keys
-func GetPublicKeyMembers(pub *HybridPublicKey) (*ecdsa.PublicKey, []byte){
+func GetPublicKeyMembers(pub *PublicKey) (*ecdsa.PublicKey, []byte){
 	return pub.classic, pub.pqc
 }
 
