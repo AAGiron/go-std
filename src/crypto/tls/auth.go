@@ -61,7 +61,7 @@ func verifyHandshakeSignature(sigType uint8, pubkey crypto.PublicKey, hashFunc c
 			return err
 		}
 	case authPQTLSLiboqs:
-		pubKey, ok := pubkey.(*liboqs_sig.PublicKey)
+		pubKey, ok := pubkey.(*liboqs_sig.HybridPublicKey)
 		if !ok {
 			return fmt.Errorf("expected a Liboqs Signature public key, got %T", pubkey)
 		}
@@ -303,7 +303,7 @@ func signatureSchemesForCertificate(version uint16, cert *Certificate) []Signatu
 				return nil
 			}
 			sigAlgs = []SignatureScheme{SignatureScheme(tlsScheme.TLSIdentifier())}
-		case liboqs_sig.PublicKey:
+		case liboqs_sig.HybridPublicKey:
 			sigAlgs = []SignatureScheme{liboqsSigSignatureSchemeMap[pub.SigId]}
 		case *wrap.PublicKey:
 			fmt.Printf("Certificate has a wrapped public key\n\n")  // HS Prints

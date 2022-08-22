@@ -832,7 +832,7 @@ func (c *Conn) processCertsFromClient(certificate Certificate) error {
 
 	if len(certs) > 0 {
 		switch certs[0].PublicKey.(type) {
-		case *ecdsa.PublicKey, *rsa.PublicKey, ed25519.PublicKey, circlSign.PublicKey, *kem.PublicKey, *liboqs_sig.PublicKey:
+		case *ecdsa.PublicKey, *rsa.PublicKey, ed25519.PublicKey, circlSign.PublicKey, *kem.PublicKey, *liboqs_sig.HybridPublicKey:
 		default:
 			c.sendAlert(alertUnsupportedCertificate)
 			return fmt.Errorf("tls: client certificate contains an unsupported public key of type %T", certs[0].PublicKey)
