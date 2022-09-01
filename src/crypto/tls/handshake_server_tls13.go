@@ -705,6 +705,19 @@ func (hs *serverHandshakeStateTLS13) pickCertificate() error {
 		encodedIdentity := hex.EncodeToString(hs.clientHello.certPSK.identities[0])
 		// JP: TODO: How to proceed when the client send multiple identities		
 		*certificate = hs.WrappedCertsDB[encodedIdentity]
+		if certificate.Certificate == nil {
+			return errors.New("couldn't find wrapped certificate corresponding to the label sent by the Client")
+		}
+	} else if c.config.WrappedCertEnabled && hs.clientHello.certPSK.establishPSK {
+		fmt.Printf("Wrapped Certificate Proposal is enabled\n\n")  // HS Prints
+		fmt.Printf("Picking a certificate for the handshake\n\n")  // HS Prints
+		fmt.Printf("Client didn't sent a Cert PSK Label in it's ClientHello. Using a normal certificate\n\n")  // HS Prints
+
+		certificate = new(Certificate)
+		*certificate = hs.WrappedCertsDB["normal_cert"]
+		if certificate.Certificate == nil {
+			return errors.New("couldn't find normal certificate to proceed the handshake and establish Cert PSK")
+		}
 	} else {
 		certificate, err = c.config.getCertificate(clientHelloInfo(c, hs.clientHello))
 		if err != nil {

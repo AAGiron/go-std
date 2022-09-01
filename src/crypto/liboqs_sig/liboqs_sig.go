@@ -26,6 +26,19 @@ const (
 	P521_Dilithium5 ID = 0x221
 	P521_Falcon1024 ID = 0x222
 	P521_RainbowVClassic ID = 0x223
+
+	Dilithium2 ID = 0x224
+	Falcon512 ID = 0x225
+	
+	Dilithium3 ID = 0x226	
+	
+	Dilithium5 ID = 0x227
+	Falcon1024 ID = 0x228
+)
+
+const (
+	isHybrid uint8 = 1
+	isPQCOnly uint8 = 2
 )
 
 
@@ -55,11 +68,15 @@ func (priv *PrivateKey) Public() crypto.PublicKey {
 
 func (priv *PrivateKey) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) (signature []byte, err error) {
 
-	classicSig, err := priv.classic.Sign(rand, digest, opts)
-	if err != nil {
-		return nil, err
-	}
+	var classicSig []byte
 
+	if priv.classic != nil {
+		classicSig, err = priv.classic.Sign(rand, digest, opts)
+		if err != nil {
+			return nil, err
+		}
+	}
+	
 	pqcSigner := oqs.Signature{}
 
 	if err := pqcSigner.Init(sigIdtoName[priv.SigId], priv.pqc); err != nil {
@@ -73,12 +90,18 @@ func (priv *PrivateKey) Sign(rand io.Reader, digest []byte, opts crypto.SignerOp
 
 	var b cryptobyte.Builder
 	
-	b.AddUint16(uint16(len(classicSig)))
-	b.AddBytes(classicSig)
-	b.AddUint16(uint16(len(pqcSig)))
-	b.AddBytes(pqcSig)
-
-
+	if priv.classic != nil {
+		b.AddUint8(isHybrid)
+		b.AddUint16(uint16(len(classicSig)))
+		b.AddBytes(classicSig)
+		b.AddUint16(uint16(len(pqcSig)))
+		b.AddBytes(pqcSig)
+	} else {
+		b.AddUint8(isPQCOnly)
+		b.AddUint16(uint16(len(pqcSig)))
+		b.AddBytes(pqcSig)
+	}	
+	
 	return b.BytesOrPanic(), nil
 }
 
@@ -86,53 +109,71 @@ func (priv *PrivateKey) Sign(rand io.Reader, digest []byte, opts crypto.SignerOp
 
 func (pub *PublicKey) MarshalBinary() ([]byte) {
 	var b cryptobyte.Builder
-	
-	classicPubBytes := elliptic.Marshal(pub.classic.Curve, pub.classic.X, pub.classic.Y)
-		
-	b.AddUint16(uint16(pub.SigId))
-	b.AddBytes(classicPubBytes)  // Classic bytes
-	b.AddBytes(pub.pqc)  // PQC bytes
+	var classicPubBytes []byte
 
+	if pub.classic != nil {
+		classicPubBytes = elliptic.Marshal(pub.classic.Curve, pub.classic.X, pub.classic.Y)
+		b.AddUint16(uint16(pub.SigId))
+		b.AddBytes(classicPubBytes)  // Classic bytes
+		b.AddBytes(pub.pqc)  // PQC bytes
+	} else {
+		b.AddUint16(uint16(pub.SigId))	
+		b.AddBytes(pub.pqc)  // PQC bytes
+	}
+		
 	return b.BytesOrPanic()
 }
 
 func (pub *PublicKey) UnmarshalBinary(raw []byte) error {
 
-	var classicPubSize int
-	
 	pub.SigId = ID(binary.BigEndian.Uint16(raw[:2]))
-	
-	pub.classic = new(ecdsa.PublicKey)
-	pub.classic.Curve, classicPubSize = ClassicFromSig(pub.SigId) 
 
-	classicBytes := raw[2:2 + classicPubSize]
-	pqcBytes := raw[2 + classicPubSize:]
+	if IsSigHybrid(pub.SigId) {
+		var classicPubSize int
+		
+		pub.classic = new(ecdsa.PublicKey)
+		pub.classic.Curve, classicPubSize = ClassicFromSig(pub.SigId) 
 
-	pub.classic.X, pub.classic.Y =	elliptic.Unmarshal(pub.classic.Curve, classicBytes)
-	if pub.classic.X == nil {
-		return errors.New("error in unmarshal ecdsa public key")
-	}	
-	
-	pub.pqc = pqcBytes
+		classicBytes := raw[2:2 + classicPubSize]
+		pqcBytes := raw[2 + classicPubSize:]
 
+		pub.classic.X, pub.classic.Y =	elliptic.Unmarshal(pub.classic.Curve, classicBytes)
+		if pub.classic.X == nil {
+			return errors.New("error in unmarshal ecdsa public key")
+		}	
+		
+		pub.pqc = pqcBytes
+	} else {
+		pub.pqc = raw[2:]
+	}
+		
 	return nil
 }
 
 
 func (pub *PublicKey) Verify(signed, sig []byte) (bool, error) {
+	var current uint16
+	var classicValid bool
 
-	classicSize := binary.BigEndian.Uint16(sig[:2])		
-	classicSig := sig[2:2 + classicSize]	
+	sigType := sig[0]
 
-	current := 2 + classicSize
+	current = 1
+	if sigType == isHybrid {
 
+		classicSize := binary.BigEndian.Uint16(sig[current:current+2])
+		current = current + 2
+		classicSig := sig[current:current + classicSize]
+
+		current = current + classicSize
+
+		classicValid = ecdsa.VerifyASN1(pub.classic, signed, classicSig)
+	}
+	
 	pqcSize := binary.BigEndian.Uint16(sig[current:current + 2])
 	
 	current = current + 2
 	
 	pqcSig := sig[current:current + pqcSize]
-
-	classicValid := ecdsa.VerifyASN1(pub.classic, signed, classicSig)
 
 	verifier := oqs.Signature{}
 
@@ -145,7 +186,13 @@ func (pub *PublicKey) Verify(signed, sig []byte) (bool, error) {
 		return false, err
 	}
 
-	if classicValid && pqcValid {
+	if sigType == isHybrid {
+		if classicValid && pqcValid {
+			return true, nil
+		}
+	}
+
+	if pqcValid {
 		return true, nil
 	}
 
@@ -156,17 +203,25 @@ func (pub *PublicKey) Verify(signed, sig []byte) (bool, error) {
 // Package Functions
 
 func GenerateKey(sigId ID) (*PublicKey, *PrivateKey, error) {
+	pub := new(PublicKey)
+	priv := new(PrivateKey)
 
-	curve, _ := ClassicFromSig(sigId)
+	if IsSigHybrid(sigId) {
+		curve, _ := ClassicFromSig(sigId)
 
-	// Classic
-	classicPriv, err := ecdsa.GenerateKey(curve, rand.Reader)
-	if err != nil {
-		return nil, nil, err
+		// Classic
+		classicPriv, err := ecdsa.GenerateKey(curve, rand.Reader)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		pub.classic = &classicPriv.PublicKey
+		priv.classic = classicPriv
+	} else {
+		pub.classic = nil
+		priv.classic = nil
 	}
-
-	classicPub := &classicPriv.PublicKey
-
+	
 	// PQC
 
 	oqsSignature := oqs.Signature{}
@@ -180,19 +235,12 @@ func GenerateKey(sigId ID) (*PublicKey, *PrivateKey, error) {
 		return nil, nil, err
 	}
 
-	pqcPriv := oqsSignature.ExportSecretKey()
-
-	// Hybrid Keypair
-
-	pub := new(PublicKey)
-	priv := new(PrivateKey)
+	pqcPriv := oqsSignature.ExportSecretKey()	
 
 	pub.SigId = sigId
-	pub.classic = classicPub
 	pub.pqc = pqcPub
 
-	priv.SigId = sigId
-	priv.classic = classicPriv
+	priv.SigId = sigId	
 	priv.pqc = pqcPriv
 	priv.hybridPub = pub
 
@@ -252,8 +300,18 @@ func HashFromSig(sigId ID) (crypto.Hash, error) {
 	}
 }
 
+func IsSigHybrid(sigID ID) bool {
+	if sigID >= P256_Dilithium2 && sigID <= P521_RainbowVClassic {
+		return true
+	}
+	return false
+}
+
 var sigIdtoName = map[ID]string {
 	P256_Dilithium2: "Dilithium2", P256_Falcon512: "Falcon-512", P256_RainbowIClassic: "Rainbow-I-Classic", 
 	P384_Dilithium3: "Dilithium3", P384_RainbowIIIClassic: "Rainbow-III-Classic", 
 	P521_Dilithium5: "Dilithium5", P521_Falcon1024: "Falcon-1024", P521_RainbowVClassic: "Rainbow-V-Classic",
+	Dilithium2: "Dilithium2", Falcon512: "Falcon-512",
+	Dilithium3: "Dilithium3",
+	Dilithium5: "Dilithium5", Falcon1024: "Falcon-1024",
 }

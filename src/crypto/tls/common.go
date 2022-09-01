@@ -630,6 +630,14 @@ const (
 
 	KEMTLSWithP256_Classic_McEliece_348864 SignatureScheme = 0xfe80
 
+	// Liboqs PQ-Only Signatures
+	PQTLS_Dilithium2 SignatureScheme = 0xfe81
+	PQTLS_Falcon512 SignatureScheme = 0xfe82
+	
+	PQTLS_Dilithium3 SignatureScheme = 0xfe83
+	
+	PQTLS_Dilithium5 SignatureScheme = 0xfe84
+	PQTLS_Falcon1024 SignatureScheme = 0xfe85
 )
 
 // Liboqs Hybrids
@@ -669,10 +677,14 @@ var liboqsSigSignatureSchemeMap = map[liboqs_sig.ID]SignatureScheme {
 	liboqs_sig.P256_Dilithium2: PQTLS_P256_Dilithium2, liboqs_sig.P256_Falcon512: PQTLS_P256_Falcon512, liboqs_sig.P256_RainbowIClassic: PQTLS_P256_RainbowIClassic, 
 	liboqs_sig.P384_Dilithium3: PQTLS_P384_Dilithium3, liboqs_sig.P384_RainbowIIIClassic: PQTLS_P384_RainbowIIIClassic, 
 	liboqs_sig.P521_Dilithium5: PQTLS_P521_Dilithium5, liboqs_sig.P521_Falcon1024: PQTLS_P521_Falcon1024, liboqs_sig.P521_RainbowVClassic: PQTLS_P521_RainbowVClassic,
+	
+	liboqs_sig.Dilithium2: PQTLS_Dilithium2, liboqs_sig.Falcon512: PQTLS_Falcon512,
+	liboqs_sig.Dilithium3: PQTLS_Dilithium3,
+	liboqs_sig.Dilithium5: PQTLS_Dilithium5, liboqs_sig.Falcon1024: PQTLS_Falcon1024,
 }
 
 func isLiboqsSigSignature(scheme SignatureScheme) SignatureScheme {
-	if scheme >= PQTLS_P256_Dilithium2 && scheme <= PQTLS_P521_RainbowVClassic {
+	if scheme >= PQTLS_P256_Dilithium2 && scheme <= PQTLS_Falcon1024 {
 		return scheme
 	}
 	return 0
