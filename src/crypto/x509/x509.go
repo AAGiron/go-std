@@ -3091,6 +3091,20 @@ func CreateWrappedCertificateRequest(rand io.Reader, template *CertificateReques
 	})
 }
 
+func GetCertPSK(csr *CertificateRequest) ([]byte) {
+	var certPSK []byte
+
+	for i := 0; i < len(csr.Extensions) ; i++ {		
+		if csr.Extensions[i].Id.Equal(oidExtensionCertPSK) {
+			certPSK = csr.Extensions[i].Value
+			
+		}
+	}
+
+	return certPSK
+
+}
+
 func VerifyWrappedCSRSignature(csr *CertificateRequest) (bool, error) {	
 	wrappedPub, ok := csr.PublicKey.(*wrap.PublicKey)
 	
