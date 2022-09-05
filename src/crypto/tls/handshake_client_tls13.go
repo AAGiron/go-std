@@ -766,6 +766,10 @@ func (hs *clientHandshakeStateTLS13) readServerCertificate() error {
 		if hs.keyKEMShare {
 			c.didPQTLS = true
 		}
+	} else if c.config.WrappedCertEnabled && c.config.PQTLSEnabled {
+		if hs.keyKEMShare {
+			c.didPQTLS = true
+		}
 	}
 
 	if isKEMTLSAuthUsed(c.peerCertificates[0], certMsg.certificate) {
@@ -1202,7 +1206,7 @@ func (c *Conn) handleNewCertPSK(msg *newCertPSKMsgTLS13) error {
 		msg.nonce, cipherSuite.hash.Size())
 
 	fmt.Printf("Cert PSK info:\n\n")
-	fmt.Printf("   Label (received from the server):\n%x\n   Generated with nonce (received from the server):\n%x\n   Cert PSK:\n%x\n\n", msg.label, msg.nonce, psk)	
+	fmt.Printf("   Label (received from the server): %x\n   Generated with nonce (received from the server): %x\n   Cert PSK: %x\n\n", msg.label[:10], msg.nonce[:10], psk[:10])	
 
 	if err := certPSKWriteToFile(c.conn.RemoteAddr().String(), msg.label, psk, true); err != nil {
 		return err

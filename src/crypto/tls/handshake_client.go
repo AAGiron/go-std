@@ -348,13 +348,13 @@ func (c *Conn) clientHandshake() (err error) {
 				establishPSK: true,				
 			}
 		} else {			
-			fmt.Printf("Client does have an agreed Cert PSK with this server:\n\nCert PSK info:\n")  // HS Prints
+			fmt.Printf("Client does have an agreed Cert PSK with this server:\n\n")  // HS Prints
 			certPSKExt = certPSKExtension{
 				establishPSK: false,
 				identities: [][]byte{pskLabel},
 			}
 
-			fmt.Printf("Cert PSK info:\n   Label: %x\n   Cert PSK: %x\n\n", pskLabel, certPSK)  // HS Prints
+			fmt.Printf("Cert PSK info:\n   Label: %x\n   Cert PSK: %x\n\n", pskLabel[:10], certPSK[:10])  // HS Prints
 			fmt.Printf("Client will send the PSK label in his ClientHello\n\n")  // HS Prints
 		}		
 	}
