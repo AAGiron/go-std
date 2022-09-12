@@ -825,11 +825,8 @@ func (hs *clientHandshakeStateTLS13) readServerCertificate() error {
 			fmt.Printf("Reading Server Wrapped Certificate\n\n")
 
 			wrappedPub, ok := pk.(*wrap.PublicKey)
-			if ok {
-				wrappedPk := wrappedPub.WrappedPk[0:81]
-				nonce := wrappedPub.WrappedPk[81:]
-
-				unwrappedPk, err := wrap.AES256Decrypt(wrappedPk, nonce, hs.certPSK)
+			if ok {			
+				unwrappedPk, err := wrap.UnwrapPublicKey(wrappedPub.WrappedPk, hs.c.certPSK)
 				if err != nil {
 					return err
 				}
