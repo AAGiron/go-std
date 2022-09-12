@@ -861,6 +861,88 @@ func (c *Certificate) hasSANExtension() bool {
 	return oidInExtensions(oidExtensionSubjectAltName, c.Extensions)
 }
 
+// CheckSignatureFromWrapped verifies that the signature on c is a valid signature
+// from a wrapped parent.
+func (c *Certificate) CheckSignatureFromWrapped(parent *Certificate, certPSK []byte) error {
+	// RFC 5280, 4.2.1.9:
+	// "If the basic constraints extension is not present in a version 3
+	// certificate, or the extension is present but the cA boolean is not
+	// asserted, then the certified public key MUST NOT be used to verify
+	// certificate signatures."
+	if parent.Version == 3 && !parent.BasicConstraintsValid ||
+		parent.BasicConstraintsValid && !parent.IsCA {
+		return ConstraintViolationError{}
+	}
+
+	if parent.KeyUsage != 0 && parent.KeyUsage&KeyUsageCertSign == 0 {
+		return ConstraintViolationError{}
+	}
+
+	if parent.PublicKeyAlgorithm == UnknownPublicKeyAlgorithm {
+		return ErrUnsupportedAlgorithm
+	}
+
+	algo := c.SignatureAlgorithm
+	signed := c.RawTBSCertificate
+	signature := c.Signature
+	publicKey := parent.PublicKey
+
+	pub, ok := publicKey.(*wrap.PublicKey)
+	if !ok {
+		return errors.New("Parent public key is not a wrapped public key")
+	}
+
+	var hashType crypto.Hash
+	var pubKeyAlgo PublicKeyAlgorithm
+
+	for _, details := range signatureAlgorithmDetails {
+		if details.algo == algo {
+			hashType = details.hash
+			pubKeyAlgo = details.pubKeyAlgo
+		}
+	}
+
+	switch hashType {
+	case crypto.Hash(0):
+		if pubKeyAlgo != Ed25519 && CirclSchemeByPublicKeyAlgorithm(pubKeyAlgo) == nil {
+			return ErrUnsupportedAlgorithm
+		}
+	case crypto.MD5:
+		return InsecureAlgorithmError(algo)
+	default:
+		if !hashType.Available() {
+			return ErrUnsupportedAlgorithm
+		}
+		h := hashType.New()
+		h.Write(signed)
+		signed = h.Sum(nil)
+	}	
+	
+	unwrappedPkBytes, err := wrap.UnwrapPublicKey(pub.WrappedPk, certPSK)
+	if err != nil {
+		return err
+	}
+
+	x, y := elliptic.Unmarshal(pub.ClassicAlgorithm, unwrappedPkBytes)
+
+	unwrappedPk := &ecdsa.PublicKey{
+		Curve: pub.ClassicAlgorithm,
+		X:     x,
+		Y:     y,
+	}
+
+	if pubKeyAlgo != ECDSA {
+		return signaturePublicKeyAlgoMismatchError(pubKeyAlgo, pub)
+	}
+
+	if !ecdsa.VerifyASN1(unwrappedPk, signed, signature) {
+		return errors.New("x509: ECDSA verification failure")
+	}
+	
+	return nil
+}
+
+
 // CheckSignatureFrom verifies that the signature on c is a valid signature
 // from parent.
 func (c *Certificate) CheckSignatureFrom(parent *Certificate) error {

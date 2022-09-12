@@ -222,6 +222,8 @@ type VerifyOptions struct {
 	// certificates from consuming excessive amounts of CPU time when
 	// validating. It does not apply to the platform verifier.
 	MaxConstraintComparisions int
+
+	CertPSK []byte
 }
 
 const (
@@ -864,7 +866,14 @@ func (c *Certificate) buildChains(cache map[*Certificate][][]*Certificate, curre
 			return
 		}
 
-		if err := c.CheckSignatureFrom(candidate); err != nil {
+		var err error
+		if candidate.PublicKeyAlgorithm == AES256ECDSA {			
+			err = c.CheckSignatureFromWrapped(candidate, opts.CertPSK)
+		} else {
+			err = c.CheckSignatureFrom(candidate)
+		}
+
+		if err != nil {
 			if hintErr == nil {
 				hintErr = err
 				hintCert = candidate
