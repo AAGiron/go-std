@@ -354,6 +354,8 @@ func (c *Conn) clientHandshake() (err error) {
 				identities: [][]byte{pskLabel},
 			}
 
+			c.certPSK = certPSK
+
 			fmt.Printf("Cert PSK info:\n   Label: %x\n   Cert PSK: %x\n\n", pskLabel[:10], certPSK[:10])  // HS Prints
 			fmt.Printf("Client will send the PSK label in his ClientHello\n\n")  // HS Prints
 		}		
@@ -458,8 +460,7 @@ func (c *Conn) clientHandshake() (err error) {
 			binderKey:        binderKey,
 			handshakeTimings: handshakeTimings,
 			ssKEMTLS:         ssKEMTLS,
-			pdkKEMTLS:        hello.pdkKEMTLS,
-			certPSK:          certPSK,
+			pdkKEMTLS:        hello.pdkKEMTLS,			
 		}
 
 		// In TLS 1.3, session tickets are delivered after the handshake.
@@ -1100,7 +1101,9 @@ func (c *Conn) verifyServerCertificate(certificates [][]byte) error {
 			CurrentTime:   c.config.time(),
 			DNSName:       dnsName,
 			Intermediates: x509.NewCertPool(),
+			CertPSK: c.certPSK,
 		}
+		
 		for _, cert := range certs[1:] {
 			opts.Intermediates.AddCert(cert)
 		}

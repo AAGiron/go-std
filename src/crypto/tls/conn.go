@@ -163,6 +163,8 @@ type Conn struct {
 
 	clientHandshakeSizes TLS13ClientHandshakeSizes
 	serverHandshakeSizes TLS13ServerHandshakeSizes
+
+	certPSK []byte
 }
 
 // Access to net.Conn methods.

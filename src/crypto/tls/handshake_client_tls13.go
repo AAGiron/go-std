@@ -53,8 +53,6 @@ type clientHandshakeStateTLS13 struct {
 	trafficSecret   []byte // client_application_traffic_secret_0
 
 	handshakeTimings CFEventTLS13ClientHandshakeTimingInfo
-
-	certPSK         []byte
 }
 
 // processDelegatedCredentialFromServer unmarshals the DelegatedCredential
