@@ -487,8 +487,9 @@ GroupSelection:
 		hs.hello.serverShare = keyShare{group: selectedGroup, data: ciphertext}
 		hs.sharedKey = sharedKey
 		hs.keyKEMShare = true
+		
 		// Secret Print
-		// fmt.Printf("Server KEX\nKEMId: %x\nsharedKey:\n  %x\n\n", kem.ID(selectedGroup), sharedKey)
+		fmt.Printf("\nTLS: Server successfully performed a %s KEX encapsulation. Sending the corresponding ciphertext through the ServerHello...\n\n", CurveIDToString(hs.hello.serverShare.group))
 	} else {
 		if _, ok := curveForCurveID(selectedGroup); (selectedGroup != X25519 && !selectedGroup.isKEM()) && !ok {
 			c.sendAlert(alertInternalError)
@@ -786,6 +787,8 @@ func (hs *serverHandshakeStateTLS13) pickCertificate() error {
 				// In our Wrapped Cert proposal, during the post-quantum scenario, the handshake will be performed with
 				// a post-quantum KEX and a wrapped certificate for authentication, which will perform classic signatures.
 				// Then sigAlg.isPQLTS() will return false. In order to circumvent this, we added this conditional.
+				c.didPQTLS = true
+			} else if hs.c.config.IgnoreSigAlg {
 				c.didPQTLS = true
 			} else {
 				c.sendAlert(alertHandshakeFailure)

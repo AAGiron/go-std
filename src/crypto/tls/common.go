@@ -177,6 +177,32 @@ const (
 	P256_Classic_McEliece_348864 CurveID = CurveID(kem.P256_Classic_McEliece_348864)
 )
 
+var StringToCurveIDMap = map[string]CurveID {
+	"P256": CurveP256, "P384": CurveP384, "P521": CurveP521,
+	"Kyber512": OQS_Kyber512, "P256_Kyber512": P256_Kyber512,
+	"Kyber768": OQS_Kyber768, "P384_Kyber768": P384_Kyber768,
+	"Kyber1024": OQS_Kyber1024, "P521_Kyber1024": P521_Kyber1024,
+	"LightSaber_KEM": LightSaber_KEM, "P256_LightSaber_KEM": P256_LightSaber_KEM,
+	"Saber_KEM": Saber_KEM, "P384_Saber_KEM": P384_Saber_KEM,
+	"FireSaber_KEM": FireSaber_KEM, "P521_FireSaber_KEM": P521_FireSaber_KEM,
+	"NTRU_HPS_2048_509": NTRU_HPS_2048_509, "P256_NTRU_HPS_2048_509": P256_NTRU_HPS_2048_509,
+	"NTRU_HPS_2048_677": NTRU_HPS_2048_677, "P384_NTRU_HPS_2048_677": P384_NTRU_HPS_2048_677,
+	"NTRU_HPS_4096_821": NTRU_HPS_4096_821, "P521_NTRU_HPS_4096_821": P521_NTRU_HPS_4096_821,
+	"NTRU_HPS_4096_1229": NTRU_HPS_4096_1229, "P521_NTRU_HPS_4096_1229": P521_NTRU_HPS_4096_1229,
+	"NTRU_HRSS_701": NTRU_HRSS_701, "P384_NTRU_HRSS_701": P384_NTRU_HRSS_701,
+	"NTRU_HRSS_1373": NTRU_HRSS_1373, "P521_NTRU_HRSS_1373": P521_NTRU_HRSS_1373,
+	"P256_Classic-McEliece-348864": P256_Classic_McEliece_348864,
+}
+
+func CurveIDToString(curve CurveID) string {
+	for key, value := range StringToCurveIDMap {
+		if value == curve {
+			return key
+		}
+	}
+	return ""
+}
+
 func (curve CurveID) isKEM() bool {
 	switch curve {
 	case SIKEp434, Kyber512, CurveID(kem.IsLiboqs(kem.ID(curve))):
@@ -1044,6 +1070,8 @@ type Config struct {
 	// connection.
 	WrappedCertEnabled bool
 
+	IgnoreSigAlg bool
+
 	// WrappedCertsDir is the directory where the Wrapped Certificates are stored
 	WrappedCertsDir string
 
@@ -1200,6 +1228,7 @@ func (c *Config) Clone() *Config {
 		sessionTicketKeys:           c.sessionTicketKeys,
 		autoSessionTicketKeys:       c.autoSessionTicketKeys,
 		WrappedCertEnabled:          c.WrappedCertEnabled,
+		IgnoreSigAlg:                c.IgnoreSigAlg,
 	}
 }
 

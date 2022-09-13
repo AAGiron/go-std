@@ -524,8 +524,9 @@ func (hs *clientHandshakeStateTLS13) establishHandshakeKeys() error {
 					return err
 				}
 				hs.keyKEMShare = true
+
 				// Secret Print
-				// fmt.Printf("Client KEX\nKEMId: %x\nsharedKey:\n  %x\n\n",kemPrivate.KEMId, sharedKey)
+				fmt.Printf("\nTLS: Client has successfully decapsulated a %s KEM ciphertext sent by the server in it's ServerHello...\n\n", CurveIDToString(hs.serverHello.serverShare.group))
 			}
 		}
 	}
