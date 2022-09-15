@@ -1137,6 +1137,8 @@ type Config struct {
 	// autoSessionTicketKeys is like sessionTicketKeys but is owned by the
 	// auto-rotation logic. See Config.ticketKeys.
 	autoSessionTicketKeys []ticketKey
+
+	PSKDBPath string
 }
 
 const (
@@ -1229,6 +1231,7 @@ func (c *Config) Clone() *Config {
 		autoSessionTicketKeys:       c.autoSessionTicketKeys,
 		WrappedCertEnabled:          c.WrappedCertEnabled,
 		IgnoreSigAlg:                c.IgnoreSigAlg,
+		PSKDBPath:                   c.PSKDBPath,
 	}
 }
 
@@ -2072,18 +2075,12 @@ func getMessageLength(msg []byte) (uint32, error) {
 	return msg_size, nil
 }
 
-func certPSKWriteToFile(peerIP string, pskLabelBytes, pskBytes []byte, isClient bool) error {
+func certPSKWriteToFile(peerIP string, pskLabelBytes, pskBytes []byte, isClient bool, pskDBPath string) error {
 
 	pskLabel := hex.EncodeToString(pskLabelBytes)
 	psk := hex.EncodeToString(pskBytes)
 
-	var fileName string
-
-	if isClient {
-		fileName = "db/client_psk_db.csv"
-	} else {
-		fileName = "db/server_psk_db.csv"
-	}
+	fileName := pskDBPath
 
 	csvFile, err := os.OpenFile(fileName, os.O_APPEND|os.O_RDWR, os.ModeAppend)
 	if err != nil {

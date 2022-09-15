@@ -1408,7 +1408,7 @@ func (hs *serverHandshakeStateTLS13) sendCertPSK() error {
 		m.nonce, cipherSuite.hash.Size())
 
 	// dbKey will be the Cert PSK Label
-	if err := certPSKWriteToFile(c.conn.RemoteAddr().String(), m.label, psk, false); err != nil {
+	if err := certPSKWriteToFile(c.conn.RemoteAddr().String(), m.label, psk, false, c.config.PSKDBPath); err != nil {
 		return err
 	}
 

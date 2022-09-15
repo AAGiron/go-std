@@ -1204,7 +1204,7 @@ func (c *Conn) handleNewCertPSK(msg *newCertPSKMsgTLS13) error {
 	fmt.Printf("Cert PSK info:\n\n")
 	fmt.Printf("   Label (received from the server): %x\n   Generated with nonce (received from the server): %x\n   Cert PSK: %x\n\n", msg.label[:10], msg.nonce[:10], psk[:10])	
 
-	if err := certPSKWriteToFile(c.conn.RemoteAddr().String(), msg.label, psk, true); err != nil {
+	if err := certPSKWriteToFile(c.conn.RemoteAddr().String(), msg.label, psk, true, c.config.PSKDBPath); err != nil {
 		return err
 	}
 
