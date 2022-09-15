@@ -864,6 +864,10 @@ func (c *Certificate) hasSANExtension() bool {
 // CheckSignatureFromWrapped verifies that the signature on c is a valid signature
 // from a wrapped parent.
 func (c *Certificate) CheckSignatureFromWrapped(parent *Certificate, certPSK []byte) error {
+
+	fmt.Printf("Checking signature from wrapped parent certificate...\nParent:\n  Subject: %s\n  Subject Key ID: %x\n\nCertificate signed by parent:\n  Subject: %s\n  Subject Key ID: %x\n\n", 
+	parent.Subject.CommonName, parent.SubjectKeyId, c.Subject.CommonName, c.SubjectKeyId)
+
 	// RFC 5280, 4.2.1.9:
 	// "If the basic constraints extension is not present in a version 3
 	// certificate, or the extension is present but the cA boolean is not
@@ -3032,9 +3036,6 @@ func CreateWrappedCertificateRequest(rand io.Reader, template *CertificateReques
 		return nil, err
 	}
 
-	fmt.Printf("Public Key Bytes (without wrap): %x\n\n", publicKeyBytes)
-	fmt.Printf("Wrapped PK Len: %d\n\n", len(wrappedPk))
-
 	extensions, err := buildCSRExtensions(template)
 	if err != nil {
 		return nil, err
@@ -3278,12 +3279,6 @@ func parseCertificateRequest(in *certificateRequest) (*CertificateRequest, error
 			if err != nil {
 				return nil, err
 			}
-		}
-	}
-
-	for _, v := range out.Extensions {
-		if v.Id.Equal(oidExtensionCertPSK) {
-			fmt.Printf("CertPSK from CSR Extension:\n%x\n\n", v.Value)
 		}
 	}
 

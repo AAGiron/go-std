@@ -46,10 +46,9 @@ func WrapPublicKey(plaintext, key []byte) (ciphertext []byte, err error) {
 	})
 	b.AddUint8LengthPrefixed(func(b *cryptobyte.Builder) {
 		b.AddBytes(nonce)
-	})						
+	})      
 
-	fmt.Printf("Wrap: Wrapped Pk: %x\n", ciphertextPk[:10])
-	fmt.Printf("Wrap: Nonce: %x\n", nonce[:10])
+	fmt.Printf("Wrapping a Public Key:\nOriginal public key: %x\nWrapped public key: %x\n\nWrapped with:\nCert PSK: %x\nNonce: %x\n\n", plaintext[:10], ciphertextPk[:10], key[:10], nonce[:10])
 
 	return b.BytesOrPanic(), nil
 }
@@ -64,10 +63,6 @@ func UnwrapPublicKey(ciphertext, key []byte) (plaintext []byte, err error) {
 		 !s.Empty() {
 		return nil, errors.New("could not unwrap public key")
 	}
-	
-	fmt.Printf("Unwrap: Ciphertext: %x\n", ciphertext[:10])
-	fmt.Printf("Unwrap: Wrapped Pk: %x\n", wrappedPk[:10])
-	fmt.Printf("Unwrap: Nonce: %x\n", nonce[:10])
 
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -83,6 +78,8 @@ func UnwrapPublicKey(ciphertext, key []byte) (plaintext []byte, err error) {
 	if err != nil {
 		return nil, err
 	}
+
+	fmt.Printf("Unwrapping a public key:\nWrapped public key %x\nUnwrapped public key: %x\n\nUnwrapped with:\nCert PSK: %x\nNonce: %x\n\n", wrappedPk[:10], plaintext[:10], key[:10], nonce[:10])
 
 	return plaintext, nil
 }

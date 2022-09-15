@@ -757,6 +757,7 @@ func (hs *clientHandshakeStateTLS13) readServerCertificate() error {
 	c.scts = certMsg.certificate.SignedCertificateTimestamps
 	c.ocspResponse = certMsg.certificate.OCSPStaple
 
+	fmt.Printf("Verifying server certificate...\n\n")
 	if err := c.verifyServerCertificate(certMsg.certificate.Certificate); err != nil {
 		return err
 	}
@@ -823,7 +824,8 @@ func (hs *clientHandshakeStateTLS13) readServerCertificate() error {
 		}
 
 		if hs.c.config.WrappedCertEnabled && len(hs.hello.certPSK.identities) > 0 && c.peerCertificates[0].PublicKeyAlgorithm == x509.AES256ECDSA {
-			fmt.Printf("Reading Server Wrapped Certificate\n\n")
+			fmt.Printf("Reading server's wrapped certificate:\n  Subject: %s\n  Subject Key ID: %x\n\n", c.peerCertificates[0].Subject.CommonName, c.peerCertificates[0].SubjectKeyId[:10])
+			fmt.Printf("Verifying handshake signature...\n\n")
 
 			wrappedPub, ok := pk.(*wrap.PublicKey)
 			if ok {			
@@ -1185,7 +1187,7 @@ func (c *Conn) handleNewSessionTicket(msg *newSessionTicketMsgTLS13) error {
 }
 
 func (c *Conn) handleNewCertPSK(msg *newCertPSKMsgTLS13) error {
-	fmt.Printf("Client is handling a NewCertPSK message\n\nComputing the Cert PSK...\n\n")
+	fmt.Printf("Client is handling a NewCertPSK message:\n  Nonce: %x\n  Label: %x\n\n", msg.nonce[:10], msg.label[:10])
 	
 	if !c.isClient {
 		c.sendAlert(alertUnexpectedMessage)
@@ -1201,12 +1203,11 @@ func (c *Conn) handleNewCertPSK(msg *newCertPSKMsgTLS13) error {
 	psk := cipherSuite.expandLabel(c.certPSKMasterSecret, "cert psk",
 		msg.nonce, cipherSuite.hash.Size())
 
-	fmt.Printf("Cert PSK info:\n\n")
-	fmt.Printf("   Label (received from the server): %x\n   Generated with nonce (received from the server): %x\n   Cert PSK: %x\n\n", msg.label[:10], msg.nonce[:10], psk[:10])	
-
 	if err := certPSKWriteToFile(c.conn.RemoteAddr().String(), msg.label, psk, true, c.config.PSKDBPath); err != nil {
 		return err
 	}
+
+	fmt.Printf("Computed Cert PSK: %x\n\n", psk[:10])
 
 	return nil
 }
