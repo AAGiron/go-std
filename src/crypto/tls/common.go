@@ -266,8 +266,9 @@ var supportedSignatureAlgorithms = []SignatureScheme{
 	KEMTLSWithOQS_Kyber512, KEMTLSWithOQS_Kyber768, KEMTLSWithOQS_Kyber1024, KEMTLSWithLightSaber_KEM, KEMTLSWithSaber_KEM, KEMTLSWithFireSaber_KEM, 
 	KEMTLSWithNTRU_HPS_2048_509, KEMTLSWithNTRU_HPS_2048_677, KEMTLSWithNTRU_HPS_4096_821, KEMTLSWithNTRU_HPS_4096_1229, KEMTLSWithNTRU_HRSS_701, KEMTLSWithNTRU_HRSS_1373,	
 
-	// Liboqs Hybrid Signature
+	// Liboqs Signature
 	PQTLS_P256_Dilithium2, PQTLS_P256_Falcon512, PQTLS_P256_RainbowIClassic, PQTLS_P384_Dilithium3, PQTLS_P384_RainbowIIIClassic, PQTLS_P521_Dilithium5, PQTLS_P521_Falcon1024, PQTLS_P521_RainbowVClassic,
+	PQTLS_Dilithium2, PQTLS_Falcon512, PQTLS_Dilithium3, PQTLS_P521_Dilithium5, PQTLS_P521_Falcon1024,
 
 }
 

@@ -7,6 +7,7 @@ package x509
 import (
 	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/liboqs_sig"
 	"crypto/rsa"
 	"crypto/x509/pkix"
 	"encoding/asn1"
@@ -76,6 +77,14 @@ func ParsePKCS8PrivateKey(der []byte) (key interface{}, err error) {
 			return nil, fmt.Errorf("x509: invalid Ed25519 private key length: %d", l)
 		}
 		return ed25519.NewKeyFromSeed(curvePrivateKey), nil
+
+	case privKey.Algo.Algorithm.Equal(oidPublicKeyPQTLS):
+		priv := new(liboqs_sig.PrivateKey)
+		
+		if err := priv.UnmarshalBinary(privKey.PrivateKey); err != nil {
+			return nil, err
+		}
+		return priv, nil
 
 	default:
 		scheme := circlPki.SchemeByOid(privKey.Algo.Algorithm)
@@ -161,7 +170,15 @@ func MarshalPKCS8PrivateKey(key interface{}) ([]byte, error) {
 			return nil, fmt.Errorf("x509: failed to marshal private key: %v", err)
 		}
 		privKey.PrivateKey = packedSk
-
+	case *liboqs_sig.PrivateKey:		
+		privBytes := k.MarshalBinary()
+		
+		privKey.Algo = pkix.AlgorithmIdentifier{
+			Algorithm: oidPublicKeyPQTLS,
+			Parameters: asn1.NullRawValue,
+		}
+		privKey.PrivateKey = privBytes		
+		
 	default:
 		return nil, fmt.Errorf("x509: unknown key type while marshaling PKCS#8: %T", key)
 	}

@@ -4,12 +4,12 @@ import (
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
+	"crypto/rand"
 	"encoding/binary"
 	"errors"
-	"io"
-	"crypto/rand"
 	"github.com/open-quantum-safe/liboqs-go/oqs"
 	"golang.org/x/crypto/cryptobyte"
+	"io"
 )
 
 // ID identifies each type of Hybrid Signature.
@@ -79,7 +79,7 @@ func (priv *PrivateKey) Sign(rand io.Reader, digest []byte, opts crypto.SignerOp
 	
 	pqcSigner := oqs.Signature{}
 
-	if err := pqcSigner.Init(sigIdtoName[priv.SigId], priv.pqc); err != nil {
+	if err := pqcSigner.Init(SigIdtoPQCName[priv.SigId], priv.pqc); err != nil {
 		return nil, err
 	}
 
@@ -103,6 +103,53 @@ func (priv *PrivateKey) Sign(rand io.Reader, digest []byte, opts crypto.SignerOp
 	}	
 	
 	return b.BytesOrPanic(), nil
+}
+
+func (priv *PrivateKey) MarshalBinary() []byte {
+	var b cryptobyte.Builder	
+
+	if priv.classic != nil {
+		panic("marshalling of hybrid private keys not supported")
+	} else {
+		b.AddUint16(uint16(priv.SigId))
+		b.AddUint24LengthPrefixed(func(b *cryptobyte.Builder) {
+			b.AddBytes(priv.pqc)
+		})
+		b.AddUint24LengthPrefixed(func(b *cryptobyte.Builder) {
+			b.AddBytes(priv.hybridPub.MarshalBinary())
+		})		
+	}
+
+	return b.BytesOrPanic()
+}
+
+func (priv *PrivateKey) UnmarshalBinary(raw []byte) error {
+	var sigId uint16
+	var pubBytes []byte
+
+	s := cryptobyte.String(raw)
+	s.ReadUint16(&sigId)
+
+	priv.SigId = ID(sigId)
+
+	if IsSigHybrid(priv.SigId) {
+		panic("unmarshalling of hybrid private keys not supported")
+	} else {
+		if !readUint24LengthPrefixed(&s, &priv.pqc) ||
+			 !readUint24LengthPrefixed(&s, &pubBytes) ||
+			 !s.Empty() {
+			return errors.New("error while parsing bytes")
+		}
+
+		pub := new(PublicKey)
+		if err := pub.UnmarshalBinary(pubBytes); err != nil {
+			return err
+		}
+
+		priv.hybridPub = pub		
+	}
+
+	return nil
 }
 
 // Public Key methods
@@ -177,7 +224,7 @@ func (pub *PublicKey) Verify(signed, sig []byte) (bool, error) {
 
 	verifier := oqs.Signature{}
 
-	if err := verifier.Init(sigIdtoName[pub.SigId], nil); err != nil {
+	if err := verifier.Init(SigIdtoPQCName[pub.SigId], nil); err != nil {
 		return false, err
 	}
 
@@ -221,12 +268,12 @@ func GenerateKey(sigId ID) (*PublicKey, *PrivateKey, error) {
 		pub.classic = nil
 		priv.classic = nil
 	}
-	
+ 
 	// PQC
 
 	oqsSignature := oqs.Signature{}
 
-	if err := oqsSignature.Init(sigIdtoName[sigId], nil); err != nil {
+	if err := oqsSignature.Init(SigIdtoPQCName[sigId], nil); err != nil {
 		return nil, nil, err
 	}
 
@@ -235,12 +282,12 @@ func GenerateKey(sigId ID) (*PublicKey, *PrivateKey, error) {
 		return nil, nil, err
 	}
 
-	pqcPriv := oqsSignature.ExportSecretKey()	
+	pqcPriv := oqsSignature.ExportSecretKey() 
 
 	pub.SigId = sigId
 	pub.pqc = pqcPub
 
-	priv.SigId = sigId	
+	priv.SigId = sigId 
 	priv.pqc = pqcPriv
 	priv.hybridPub = pub
 
@@ -266,8 +313,6 @@ func GetPrivateKeyMembers(priv *PrivateKey) (*ecdsa.PrivateKey, []byte, *PublicK
 	return priv.classic, priv.pqc, priv.hybridPub
 }
 
-// This function is only called in our tests.
-// Used in the marshalling of the hybrid root CA certificate and keys
 func GetPublicKeyMembers(pub *PublicKey) (*ecdsa.PublicKey, []byte){
 	return pub.classic, pub.pqc
 }
@@ -307,11 +352,35 @@ func IsSigHybrid(sigID ID) bool {
 	return false
 }
 
-var sigIdtoName = map[ID]string {
-	P256_Dilithium2: "Dilithium2", P256_Falcon512: "Falcon-512", P256_RainbowIClassic: "Rainbow-I-Classic", 
-	P384_Dilithium3: "Dilithium3", P384_RainbowIIIClassic: "Rainbow-III-Classic", 
+var SigIdtoPQCName = map[ID]string{
+	P256_Dilithium2: "Dilithium2", P256_Falcon512: "Falcon-512", P256_RainbowIClassic: "Rainbow-I-Classic",
+	P384_Dilithium3: "Dilithium3", P384_RainbowIIIClassic: "Rainbow-III-Classic",
 	P521_Dilithium5: "Dilithium5", P521_Falcon1024: "Falcon-1024", P521_RainbowVClassic: "Rainbow-V-Classic",
 	Dilithium2: "Dilithium2", Falcon512: "Falcon-512",
 	Dilithium3: "Dilithium3",
 	Dilithium5: "Dilithium5", Falcon1024: "Falcon-1024",
+}
+
+var SigIdtoName = map[ID]string{
+	P256_Dilithium2: "P256_Dilithium2", P256_Falcon512: "P256_Falcon-512", P256_RainbowIClassic: "P256_Rainbow-I-Classic",
+	P384_Dilithium3: "P384_Dilithium3", P384_RainbowIIIClassic: "P384_Rainbow-III-Classic",
+	P521_Dilithium5: "P521_Dilithium5", P521_Falcon1024: "P521_Falcon-1024", P521_RainbowVClassic: "P521_Rainbow-V-Classic",
+	Dilithium2: "Dilithium2", Falcon512: "Falcon-512",
+	Dilithium3: "Dilithium3",
+	Dilithium5: "Dilithium5", Falcon1024: "Falcon-1024",
+}
+
+func NameToSigID(sigName string) ID {
+	for key, value := range SigIdtoName {
+		if value == sigName {
+			return key
+		}
+	}
+	return ID(0)
+}
+
+// readUint24LengthPrefixed acts like s.ReadUint24LengthPrefixed, but targets a
+// []byte instead of a cryptobyte.String.
+func readUint24LengthPrefixed(s *cryptobyte.String, out *[]byte) bool {
+	return s.ReadUint24LengthPrefixed((*cryptobyte.String)(out))
 }
