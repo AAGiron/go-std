@@ -53,6 +53,8 @@ type clientHandshakeStateTLS13 struct {
 	trafficSecret   []byte // client_application_traffic_secret_0
 
 	handshakeTimings CFEventTLS13ClientHandshakeTimingInfo
+
+	certPSK         []byte
 }
 
 // processDelegatedCredentialFromServer unmarshals the DelegatedCredential
@@ -667,7 +669,7 @@ func isPQTLSAuthUsed(peerCertificate *x509.Certificate, cert Certificate) bool {
 	}
 
 	if hybridPQCPub, ok := peerCertificate.PublicKey.(*liboqs_sig.PublicKey); ok {
-		if hybridPQCPub.SigId >= liboqs_sig.P256_Dilithium2 && hybridPQCPub.SigId <= liboqs_sig.P521_RainbowVClassic {
+		if hybridPQCPub.SigId >= liboqs_sig.P256_Dilithium2 && hybridPQCPub.SigId <= liboqs_sig.Falcon1024 {
 			return true
 		}
 	}	

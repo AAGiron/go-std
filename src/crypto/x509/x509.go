@@ -121,6 +121,9 @@ func marshalPublicKey(pub interface{}) (publicKeyBytes []byte, publicKeyAlgorith
 	case *liboqs_sig.PublicKey:
 		publicKeyBytes = pub.MarshalBinary()				
 		publicKeyAlgorithm.Algorithm = oidPublicKeyPQTLS  
+	case liboqs_sig.PublicKey:
+		publicKeyBytes = pub.MarshalBinary()				
+		publicKeyAlgorithm.Algorithm = oidPublicKeyPQTLS  
 	case *wrap.PublicKey:
 		publicKeyBytes = pub.WrappedPk
 
@@ -385,12 +388,22 @@ var (
 	oidSignatureP521Dilithium5 = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 17}
 	oidSignatureP521Falcon1024 = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 18}
 	oidSignatureP521RainbowVClassic = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 19}
+
+	oidSignatureDilithium2 = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 20}
+	oidSignatureFalcon512 = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 21}	
+	oidSignatureDilithium3 = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 22}	
+	oidSignatureDilithium5 = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 23}
+	oidSignatureFalcon1024 = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 24}	
 )
 
 var oidSignatureFromSigID = map[liboqs_sig.ID]asn1.ObjectIdentifier {
 	liboqs_sig.P256_Dilithium2: oidSignatureP256Dilithium2, liboqs_sig.P256_Falcon512: oidSignatureP256Falcon512, liboqs_sig.P256_RainbowIClassic: oidSignatureP256RainbowIClassic, 
 	liboqs_sig.P384_Dilithium3: oidSignatureP384Dilithium3, liboqs_sig.P384_RainbowIIIClassic: oidSignatureP384RainbowIIIClassic, 
 	liboqs_sig.P521_Dilithium5: oidSignatureP521Dilithium5, liboqs_sig.P521_Falcon1024: oidSignatureP521Falcon1024, liboqs_sig.P521_RainbowVClassic: oidSignatureP521RainbowVClassic,
+
+	liboqs_sig.Dilithium2: oidSignatureDilithium2, liboqs_sig.Falcon512: oidSignatureFalcon512,
+	liboqs_sig.Dilithium3: oidSignatureDilithium3,
+	liboqs_sig.Dilithium5: oidSignatureDilithium5, liboqs_sig.Falcon1024: oidSignatureFalcon1024,
 }
 
 var signatureAlgorithmDetails = []struct {
@@ -1250,7 +1263,7 @@ func parsePublicKey(algo PublicKeyAlgorithm, keyData *publicKeyInfo) (interface{
 		pub := new(liboqs_sig.PublicKey)
 		err := pub.UnmarshalBinary(keyData.PublicKey.Bytes)
 		if err != nil {
-			return nil, errors.New("x509: wrong KEM identifier")
+			return nil, err
 		}
 		return pub, nil
 	case AES256ECDSA:
@@ -2350,10 +2363,12 @@ func signingParamsForPublicKey(pub interface{}, requestedSigAlgo SignatureAlgori
 	case liboqs_sig.PublicKey:
 		pubType = PQTLS
 		sigAlgo.Algorithm = oidSignatureFromSigID[pub.SigId]
-		hashFunc, err = liboqs_sig.HashFromSig(pub.SigId)
-		if err != nil {
-			return
-		}
+		if liboqs_sig.IsSigHybrid(pub.SigId) {
+			hashFunc, err = liboqs_sig.HashFromSig(pub.SigId)
+			if err != nil {
+				return
+			}
+		}			
 	default:
 		err = errors.New("x509: only RSA, ECDSA, Ed25519 and circl keys supported")
 	}
