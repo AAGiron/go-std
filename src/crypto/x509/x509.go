@@ -121,6 +121,9 @@ func marshalPublicKey(pub interface{}) (publicKeyBytes []byte, publicKeyAlgorith
 	case *liboqs_sig.PublicKey:
 		publicKeyBytes = pub.MarshalBinary()				
 		publicKeyAlgorithm.Algorithm = oidPublicKeyPQTLS  
+	case liboqs_sig.PublicKey:
+		publicKeyBytes = pub.MarshalBinary()				
+		publicKeyAlgorithm.Algorithm = oidPublicKeyPQTLS  
 	case *wrap.PublicKey:
 		publicKeyBytes = pub.WrappedPk
 
