@@ -11,6 +11,7 @@ import (
 	"crypto/elliptic"
 	"crypto/hmac"
 	"crypto/kem"
+	"crypto/keystore"
 	"crypto/liboqs_sig"
 	"crypto/rsa"
 	"crypto/wrap"
@@ -762,6 +763,10 @@ func (hs *clientHandshakeStateTLS13) readServerCertificate() error {
 	fmt.Printf("Verifying server certificate...\n\n")
 	if err := c.verifyServerCertificate(certMsg.certificate.Certificate); err != nil {
 		return err
+	}
+
+	if c.config.WrappedCertEnabled {		
+		keystore.StoreTrustedCertificate(c.config.TruststorePath, c.config.TruststorePassword, "intermediate ca", certMsg.certificate.Certificate[1])
 	}
 
 	if isPQTLSAuthUsed(c.peerCertificates[0], certMsg.certificate) {

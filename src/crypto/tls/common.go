@@ -1152,6 +1152,12 @@ type Config struct {
 	autoSessionTicketKeys []ticketKey
 
 	PSKDBPath string
+
+	// Path to the client's truststore, where it stores trusted certificates
+	TruststorePath string
+
+	// Password of the client's truststore, where it stores trusted certificates
+	TruststorePassword string
 }
 
 const (
@@ -1245,6 +1251,8 @@ func (c *Config) Clone() *Config {
 		WrappedCertEnabled:          c.WrappedCertEnabled,
 		IgnoreSigAlg:                c.IgnoreSigAlg,
 		PSKDBPath:                   c.PSKDBPath,
+		TruststorePath: 						 c.TruststorePath,
+		TruststorePassword: 				 c.TruststorePassword,
 	}
 }
 
