@@ -1,6 +1,9 @@
 # github.com/open-quantum-safe/liboqs-go v0.0.0-20220105163900-e0f759d70fa5
 ## explicit
 github.com/open-quantum-safe/liboqs-go/oqs
+# github.com/pavlo-v-chernykh/keystore-go/v4 v4.4.0
+## explicit
+github.com/pavlo-v-chernykh/keystore-go/v4
 # golang.org/x/crypto v0.0.0-20201016220609-9e8e0b390897
 ## explicit
 golang.org/x/crypto/chacha20
