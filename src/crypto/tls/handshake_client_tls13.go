@@ -765,7 +765,7 @@ func (hs *clientHandshakeStateTLS13) readServerCertificate() error {
 		return err
 	}
 
-	if c.config.WrappedCertEnabled {		
+	if c.config.WrappedCertEnabled && c.config.PreQuantumScenario {		
 		keystore.StoreTrustedCertificate(c.config.TruststorePath, c.config.TruststorePassword, "intermediate ca", certMsg.certificate.Certificate[1])
 	}
 

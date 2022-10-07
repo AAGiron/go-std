@@ -337,7 +337,7 @@ func (c *Conn) clientHandshake() (err error) {
 
 	if c.config.WrappedCertEnabled {
 		fmt.Printf("Wrapped Certificate Proposal is enabled\n\n")  // HS Prints
-		pskLabel, certPSK, err = loadCertPSK(c.conn.RemoteAddr().String())
+		pskLabel, certPSK, err = loadCertPSK(c.conn.RemoteAddr().String(), c.config.PSKDBPath)
 		if err != nil {
 			return err
 		}
@@ -1267,11 +1267,8 @@ func hostnameInSNI(name string) string {
 	return name
 }
 
-func loadCertPSK(key string) (pskLabel []byte, psk []byte, err error) {
-
-	fileName := "db/client_psk_db.csv"
-
-	csvFile, err := os.Open(fileName)
+func loadCertPSK(key, pskDBPath string) (pskLabel []byte, psk []byte, err error) {
+	csvFile, err := os.Open(pskDBPath)
 	if err != nil {
 		return nil, nil, err
 	}

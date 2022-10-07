@@ -48,7 +48,7 @@ func writeKeyStore(ks keystore.KeyStore, filename string, password []byte) error
 func ReadKeyStore(filename string, password []byte) (keystore.KeyStore, error) {
 	f, err := os.Open(filename)
 	if err != nil {
-		return nil, err
+		return keystore.KeyStore{}, err
 	}
 
 	defer func() {
@@ -59,7 +59,7 @@ func ReadKeyStore(filename string, password []byte) (keystore.KeyStore, error) {
 
 	ks := keystore.New()
 	if err := ks.Load(f, password); err != nil {
-		return nil, err
+		return keystore.KeyStore{}, err
 	}
 
 	return ks, nil

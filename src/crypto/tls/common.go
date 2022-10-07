@@ -1158,6 +1158,10 @@ type Config struct {
 
 	// Password of the client's truststore, where it stores trusted certificates
 	TruststorePassword string
+
+	// PreQuantumScenario is true if we are simulating a TLS handshake in the pre-quantum scenario
+	// of the PKI Extended Lifetime Period proposal
+	PreQuantumScenario bool
 }
 
 const (
@@ -1253,6 +1257,7 @@ func (c *Config) Clone() *Config {
 		PSKDBPath:                   c.PSKDBPath,
 		TruststorePath: 						 c.TruststorePath,
 		TruststorePassword: 				 c.TruststorePassword,
+		PreQuantumScenario:          c.PreQuantumScenario,
 	}
 }
 
