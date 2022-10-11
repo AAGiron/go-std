@@ -825,7 +825,7 @@ func (hs *clientHandshakeStateTLS13) readServerCertificate() error {
 			pk = c.verifiedDC.cred.publicKey
 		}
 
-		if hs.c.config.WrappedCertEnabled && len(hs.hello.certPSK.identities) > 0 && c.peerCertificates[0].PublicKeyAlgorithm == x509.AES256ECDSA {
+		if hs.c.config.WrappedCertEnabled && len(hs.hello.certPSK.identities) > 0 && c.peerCertificates[0].PublicKeyAlgorithm == x509.WrappedECDSA {
 			fmt.Printf("Reading server's wrapped certificate:\n  Subject: %s\n  Subject Key ID: %x\n\n", c.peerCertificates[0].Subject.CommonName, c.peerCertificates[0].SubjectKeyId[:10])
 			fmt.Printf("Verifying handshake signature...\n\n")
 

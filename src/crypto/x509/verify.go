@@ -867,7 +867,7 @@ func (c *Certificate) buildChains(cache map[*Certificate][][]*Certificate, curre
 		}
 
 		var err error
-		if candidate.PublicKeyAlgorithm == AES256ECDSA {			
+		if candidate.PublicKeyAlgorithm == WrappedECDSA {			
 			err = c.CheckSignatureFromWrapped(candidate, opts.CertPSK)
 		} else {
 			err = c.CheckSignatureFrom(candidate)

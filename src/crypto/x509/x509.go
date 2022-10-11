@@ -17,6 +17,7 @@ import (
 	"crypto/sha1"
 	"crypto/x509/pkix"
 	"encoding/asn1"
+	"encoding/hex"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -276,7 +277,7 @@ const (
 	EdDilithium4
 	KEMTLS
 	PQTLS
-	AES256ECDSA
+	WrappedECDSA
 )
 
 var publicKeyAlgoName = [...]string{
@@ -548,6 +549,9 @@ var (
 	oidPublicKeyAES256P256  = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 13}
 	oidPublicKeyAES256P384  = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 14}
 	oidPublicKeyAES256P521  = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 15}
+	oidPublicKeyAscon80pqP256  = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 16}
+	oidPublicKeyAscon80pqP384  = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 17}
+	oidPublicKeyAscon80pqP521  = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 18}
 )
 
 func getPublicKeyAlgorithmFromOID(oid asn1.ObjectIdentifier) PublicKeyAlgorithm {
@@ -570,8 +574,9 @@ func getPublicKeyAlgorithmFromOID(oid asn1.ObjectIdentifier) PublicKeyAlgorithm 
 		return KEMTLS
 	case oid.Equal(oidPublicKeyPQTLS):
 		return PQTLS
-	case oid.Equal(oidPublicKeyAES256P256) || oid.Equal(oidPublicKeyAES256P384) || oid.Equal(oidPublicKeyAES256P521):
-		return AES256ECDSA
+	case oid.Equal(oidPublicKeyAES256P256) || oid.Equal(oidPublicKeyAES256P384) || oid.Equal(oidPublicKeyAES256P521) || 
+	     oid.Equal(oidPublicKeyAscon80pqP256) || oid.Equal(oidPublicKeyAscon80pqP384) || oid.Equal(oidPublicKeyAscon80pqP521):
+		return WrappedECDSA
 	default:
 		scheme := circlPki.SchemeByOid(oid)
 		if scheme == nil {
@@ -935,7 +940,14 @@ func (c *Certificate) CheckSignatureFromWrapped(parent *Certificate, certPSK []b
 		signed = h.Sum(nil)
 	}	
 	
-	unwrappedPkBytes, err := wrap.UnwrapPublicKey(pub.WrappedPk, certPSK)
+	var wrapAlgorithm string
+	for i := 0; i < len(parent.ExtraExtensions); i++ {	
+		if parent.ExtraExtensions[i].Id.Equal(oidExtensionWrapAlgorithmInfo) {
+			wrapAlgorithm = hex.EncodeToString(parent.ExtraExtensions[i].Value)
+		}
+	}	
+
+	unwrappedPkBytes, err := wrap.UnwrapPublicKey(pub.WrappedPk, certPSK, wrapAlgorithm)
 	if err != nil {
 		return err
 	}
@@ -1266,7 +1278,7 @@ func parsePublicKey(algo PublicKeyAlgorithm, keyData *publicKeyInfo) (interface{
 			return nil, err
 		}
 		return pub, nil
-	case AES256ECDSA:
+	case WrappedECDSA:
 		pub := new(wrap.PublicKey)
 		pub.WrappedPk = keyData.PublicKey.Bytes
 		
@@ -1276,6 +1288,12 @@ func parsePublicKey(algo PublicKeyAlgorithm, keyData *publicKeyInfo) (interface{
 		case keyData.Algorithm.Algorithm.Equal(oidPublicKeyAES256P384):
 			pub.ClassicAlgorithm = elliptic.P384()
 		case keyData.Algorithm.Algorithm.Equal(oidPublicKeyAES256P521):
+			pub.ClassicAlgorithm = elliptic.P521()
+		case keyData.Algorithm.Algorithm.Equal(oidPublicKeyAscon80pqP256):
+			pub.ClassicAlgorithm = elliptic.P256()
+		case keyData.Algorithm.Algorithm.Equal(oidPublicKeyAscon80pqP384):
+			pub.ClassicAlgorithm = elliptic.P384()
+		case keyData.Algorithm.Algorithm.Equal(oidPublicKeyAscon80pqP521):
 			pub.ClassicAlgorithm = elliptic.P521()
 		}
 		
@@ -1919,6 +1937,7 @@ var (
 	oidExtensionCRLNumber             = []int{2, 5, 29, 20}
 	oidExtensionDelegatedCredential   = []int{1, 3, 6, 1, 4, 1, 44363, 44}
 	oidExtensionCertPSK               = []int{1, 3, 6, 1, 4, 1, 44363, 45}  // CSR Extension to transmit the Cert PSK in the context of wrapped CSR's
+	oidExtensionWrapAlgorithmInfo     = []int{1, 3, 6, 1, 4, 1, 44363, 46}  // CSR Extension containing information about the symmetric cryptography algorithm used to wrap a certificate's public key
 )
 
 var (
@@ -3006,7 +3025,7 @@ func CreateCertificateRequest(rand io.Reader, template *CertificateRequest, priv
 // ed25519.PrivateKey satisfies this.)
 //
 // The returned slice is the certificate request in DER encoding.
-func CreateWrappedCertificateRequest(rand io.Reader, template *CertificateRequest, priv interface{}, certPSK []byte) (csr []byte, err error) {
+func CreateWrappedCertificateRequest(rand io.Reader, template *CertificateRequest, priv interface{}, certPSK []byte, wrapAlgorithm string) (csr []byte, err error) {
 	
 	certPSKExtension := pkix.Extension{
 		Id: oidExtensionCertPSK,
@@ -3014,6 +3033,18 @@ func CreateWrappedCertificateRequest(rand io.Reader, template *CertificateReques
 		Value: certPSK,
 	}
 
+	wrapAlgoBytes, err := hex.DecodeString(wrapAlgorithm)
+	if err != nil {
+		return nil, err
+	}
+
+	wrapAlgoExtension := pkix.Extension{
+		Id: oidExtensionWrapAlgorithmInfo,
+		Critical: false,
+		Value: wrapAlgoBytes,
+	}
+	
+	template.ExtraExtensions = append(template.ExtraExtensions, wrapAlgoExtension)
 	template.ExtraExtensions = append(template.ExtraExtensions, certPSKExtension)
 	
 	key, ok := priv.(crypto.Signer)
@@ -3046,7 +3077,7 @@ func CreateWrappedCertificateRequest(rand io.Reader, template *CertificateReques
 	}
 
 	// wrappedPk, wrappedPKNonce, err := wrap.AES256Encrypt(publicKeyBytes, certPSK)
-	wrappedPk, err := wrap.WrapPublicKey(publicKeyBytes, certPSK)
+	wrappedPk, err := wrap.WrapPublicKey(publicKeyBytes, certPSK, wrapAlgorithm)
 	if err != nil {
 		return nil, err
 	}
@@ -3206,6 +3237,14 @@ func VerifyWrappedCSRSignature(csr *CertificateRequest) (bool, error) {
 	wrappedPub, ok := csr.PublicKey.(*wrap.PublicKey)
 	
 	if ok {
+		var wrapAlgorithm string
+
+		for i := 0; i < len(csr.ExtraExtensions); i++ {	
+			if csr.ExtraExtensions[i].Id.Equal(oidExtensionWrapAlgorithmInfo) {
+				wrapAlgorithm = hex.EncodeToString(csr.ExtraExtensions[i].Value)
+			}
+		}
+
 		var certPSK []byte
 
 		for i := 0; i < len(csr.Extensions) ; i++ {		
@@ -3214,7 +3253,7 @@ func VerifyWrappedCSRSignature(csr *CertificateRequest) (bool, error) {
 			}
 		}
 	
-		unwrappedPkBytes, err := wrap.UnwrapPublicKey(wrappedPub.WrappedPk, certPSK)
+		unwrappedPkBytes, err := wrap.UnwrapPublicKey(wrappedPub.WrappedPk, certPSK, wrapAlgorithm)
 		if err != nil {
 			return false, err
 		}
