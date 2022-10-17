@@ -1572,7 +1572,7 @@ func (hs *serverHandshakeStateTLS13) readClientFinished() error {
 }
 
 
-func (hs *serverHandshakeStateTLS13) loadAllWrappedCerts() error {
+func (hs *serverHandshakeStateTLS13) loadAllWrappedCerts(preQuantumScenario bool) error {
 	
 	wrappedCertsDir := hs.c.config.WrappedCertsDir
 	serverDomain := "teste"
@@ -1598,7 +1598,11 @@ func (hs *serverHandshakeStateTLS13) loadAllWrappedCerts() error {
 			return err
 		}
 
-		hs.WrappedCertsDB[dirName] = loadedCert		
+		if !preQuantumScenario {			
+			loadedCert.Certificate = loadedCert.Certificate[:1]		
+		}		
+		
+		hs.WrappedCertsDB[dirName] = loadedCert
 	}
 
 	return nil

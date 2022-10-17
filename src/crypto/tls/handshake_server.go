@@ -55,7 +55,7 @@ func (c *Conn) serverHandshake() error {
 			WrappedCertsDB:   make(map[string]Certificate),
 		}
 
-		if err := hs.loadAllWrappedCerts(); err != nil {
+		if err := hs.loadAllWrappedCerts(c.config.PreQuantumScenario); err != nil {
 			return err			
 		}
 		c.serverHandshakeSizes = TLS13ServerHandshakeSizes{}

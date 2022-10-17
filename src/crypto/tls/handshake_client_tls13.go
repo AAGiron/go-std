@@ -11,6 +11,7 @@ import (
 	"crypto/elliptic"
 	"crypto/hmac"
 	"crypto/kem"
+	"crypto/keystore"
 	"crypto/liboqs_sig"
 	"crypto/rsa"
 	"crypto/wrap"
@@ -760,8 +761,25 @@ func (hs *clientHandshakeStateTLS13) readServerCertificate() error {
 	c.ocspResponse = certMsg.certificate.OCSPStaple
 
 	fmt.Printf("Verifying server certificate...\n\n")
+
+	// serverCertificates := make([]*x509.Certificate, len(certMsg.certificate.Certificate))	
+	// for i := 0; i < len(certMsg.certificate.Certificate); i++ {
+	// 	cert, err := x509.ParseCertificate(certMsg.certificate.Certificate[i])
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
+	// 	serverCertificates[i] = cert
+	// 	fmt.Printf("Subject: %s   ---  Issued by: %s\n", serverCertificates[i].Subject.CommonName, serverCertificates[i].Issuer.CommonName)
+	// }
+
 	if err := c.verifyServerCertificate(certMsg.certificate.Certificate); err != nil {
 		return err
+	}
+	
+	if c.config.WrappedCertEnabled && c.config.PreQuantumScenario && len(certMsg.certificate.Certificate) == 3 {			
+		if err := keystore.StoreTrustedCertificate(c.config.TruststorePath, c.config.TruststorePassword, "wrapped ca", certMsg.certificate.Certificate[1]); err != nil {
+			return err
+		}
 	}
 
 	if isPQTLSAuthUsed(c.peerCertificates[0], certMsg.certificate) {

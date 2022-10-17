@@ -1152,6 +1152,16 @@ type Config struct {
 	autoSessionTicketKeys []ticketKey
 
 	PSKDBPath string
+
+	// Path to the client's truststore, where it stores trusted certificates
+	TruststorePath string
+
+	// Password of the client's truststore, where it stores trusted certificates
+	TruststorePassword string
+
+	// PreQuantumScenario is true if we are simulating a TLS handshake in the pre-quantum scenario
+	// of the PKI Extended Lifetime Period proposal
+	PreQuantumScenario bool
 }
 
 const (
@@ -1245,6 +1255,9 @@ func (c *Config) Clone() *Config {
 		WrappedCertEnabled:          c.WrappedCertEnabled,
 		IgnoreSigAlg:                c.IgnoreSigAlg,
 		PSKDBPath:                   c.PSKDBPath,
+		TruststorePath: 						 c.TruststorePath,
+		TruststorePassword: 				 c.TruststorePassword,
+		PreQuantumScenario:          c.PreQuantumScenario,
 	}
 }
 
