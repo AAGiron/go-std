@@ -17,7 +17,6 @@ import (
 	"crypto/sha1"
 	"crypto/x509/pkix"
 	"encoding/asn1"
-	"encoding/hex"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -127,12 +126,10 @@ func marshalPublicKey(pub interface{}) (publicKeyBytes []byte, publicKeyAlgorith
 		publicKeyAlgorithm.Algorithm = oidPublicKeyPQTLS  
 	case *wrap.PublicKey:
 		publicKeyBytes = pub.WrappedPk
-
-		 wrappedOID := ecToWrappedOID(pub.ClassicAlgorithm)
-		 if wrappedOID == nil {
+		wrappedOID := getWrappedOID(pub.ClassicAlgorithm, pub.WrapAlgorithm)
+		if wrappedOID == nil {
 			return nil, pkix.AlgorithmIdentifier{}, fmt.Errorf("x509: unsupported public key type: %T", pub)
-		 }
-
+		}
 		publicKeyAlgorithm.Algorithm = wrappedOID		
 	default:
 		return nil, pkix.AlgorithmIdentifier{}, fmt.Errorf("x509: unsupported public key type: %T", pub)
@@ -940,14 +937,7 @@ func (c *Certificate) CheckSignatureFromWrapped(parent *Certificate, certPSK []b
 		signed = h.Sum(nil)
 	}	
 	
-	var wrapAlgorithm string
-	for i := 0; i < len(parent.ExtraExtensions); i++ {	
-		if parent.ExtraExtensions[i].Id.Equal(oidExtensionWrapAlgorithmInfo) {
-			wrapAlgorithm = hex.EncodeToString(parent.ExtraExtensions[i].Value)
-		}
-	}	
-
-	unwrappedPkBytes, err := wrap.UnwrapPublicKey(pub.WrappedPk, certPSK, wrapAlgorithm)
+	unwrappedPkBytes, err := wrap.UnwrapPublicKey(pub.WrappedPk, certPSK, pub.WrapAlgorithm)
 	if err != nil {
 		return err
 	}
@@ -1285,16 +1275,22 @@ func parsePublicKey(algo PublicKeyAlgorithm, keyData *publicKeyInfo) (interface{
 		switch  {
 		case keyData.Algorithm.Algorithm.Equal(oidPublicKeyAES256P256):
 			pub.ClassicAlgorithm = elliptic.P256()
+			pub.WrapAlgorithm = "AES256"
 		case keyData.Algorithm.Algorithm.Equal(oidPublicKeyAES256P384):
 			pub.ClassicAlgorithm = elliptic.P384()
+			pub.WrapAlgorithm = "AES256"
 		case keyData.Algorithm.Algorithm.Equal(oidPublicKeyAES256P521):
 			pub.ClassicAlgorithm = elliptic.P521()
+			pub.WrapAlgorithm = "AES256"
 		case keyData.Algorithm.Algorithm.Equal(oidPublicKeyAscon80pqP256):
 			pub.ClassicAlgorithm = elliptic.P256()
+			pub.WrapAlgorithm = "Ascon80pq"
 		case keyData.Algorithm.Algorithm.Equal(oidPublicKeyAscon80pqP384):
 			pub.ClassicAlgorithm = elliptic.P384()
+			pub.WrapAlgorithm = "Ascon80pq"
 		case keyData.Algorithm.Algorithm.Equal(oidPublicKeyAscon80pqP521):
 			pub.ClassicAlgorithm = elliptic.P521()
+			pub.WrapAlgorithm = "Ascon80pq"
 		}
 		
 		return pub, nil
@@ -1937,7 +1933,6 @@ var (
 	oidExtensionCRLNumber             = []int{2, 5, 29, 20}
 	oidExtensionDelegatedCredential   = []int{1, 3, 6, 1, 4, 1, 44363, 44}
 	oidExtensionCertPSK               = []int{1, 3, 6, 1, 4, 1, 44363, 45}  // CSR Extension to transmit the Cert PSK in the context of wrapped CSR's
-	oidExtensionWrapAlgorithmInfo     = []int{1, 3, 6, 1, 4, 1, 44363, 46}  // CSR Extension containing information about the symmetric cryptography algorithm used to wrap a certificate's public key
 )
 
 var (
@@ -3033,18 +3028,6 @@ func CreateWrappedCertificateRequest(rand io.Reader, template *CertificateReques
 		Value: certPSK,
 	}
 
-	wrapAlgoBytes, err := hex.DecodeString(wrapAlgorithm)
-	if err != nil {
-		return nil, err
-	}
-
-	wrapAlgoExtension := pkix.Extension{
-		Id: oidExtensionWrapAlgorithmInfo,
-		Critical: false,
-		Value: wrapAlgoBytes,
-	}
-	
-	template.ExtraExtensions = append(template.ExtraExtensions, wrapAlgoExtension)
 	template.ExtraExtensions = append(template.ExtraExtensions, certPSKExtension)
 	
 	key, ok := priv.(crypto.Signer)
@@ -3066,7 +3049,7 @@ func CreateWrappedCertificateRequest(rand io.Reader, template *CertificateReques
 		return nil, err
 	}
 	if pubKey, ok := key.Public().(*ecdsa.PublicKey); ok {
-		wrappedOID := ecToWrappedOID(pubKey.Curve)
+		wrappedOID := getWrappedOID(pubKey.Curve, wrapAlgorithm)
 		if wrappedOID == nil {
 			return nil, errors.New("unsupported elliptic curve for wrapped key")
 		}
@@ -3236,14 +3219,7 @@ func GetCertPSK(csr *CertificateRequest) ([]byte) {
 func VerifyWrappedCSRSignature(csr *CertificateRequest) (bool, error) {	
 	wrappedPub, ok := csr.PublicKey.(*wrap.PublicKey)
 	
-	if ok {
-		var wrapAlgorithm string
-
-		for i := 0; i < len(csr.ExtraExtensions); i++ {	
-			if csr.ExtraExtensions[i].Id.Equal(oidExtensionWrapAlgorithmInfo) {
-				wrapAlgorithm = hex.EncodeToString(csr.ExtraExtensions[i].Value)
-			}
-		}
+	if ok {		
 
 		var certPSK []byte
 
@@ -3253,7 +3229,7 @@ func VerifyWrappedCSRSignature(csr *CertificateRequest) (bool, error) {
 			}
 		}
 	
-		unwrappedPkBytes, err := wrap.UnwrapPublicKey(wrappedPub.WrappedPk, certPSK, wrapAlgorithm)
+		unwrappedPkBytes, err := wrap.UnwrapPublicKey(wrappedPub.WrappedPk, certPSK, wrappedPub.WrapAlgorithm)
 		if err != nil {
 			return false, err
 		}
@@ -3482,15 +3458,30 @@ func CreateRevocationList(rand io.Reader, template *RevocationList, issuer *Cert
 	})
 }
 
-func ecToWrappedOID(ec elliptic.Curve) asn1.ObjectIdentifier {
-	switch ec {
-	case elliptic.P256():
-		return oidPublicKeyAES256P256
-	case elliptic.P384():
-		return oidPublicKeyAES256P384
-	case elliptic.P521():
-		return oidPublicKeyAES256P521
-	default:
-		return nil
+func getWrappedOID(ec elliptic.Curve, wrapAlgorithm string) asn1.ObjectIdentifier {
+	if wrapAlgorithm == "AES256" {
+		switch ec {
+		case elliptic.P256():
+			return oidPublicKeyAES256P256
+		case elliptic.P384():
+			return oidPublicKeyAES256P384
+		case elliptic.P521():
+			return oidPublicKeyAES256P521
+		default:
+			return nil
+		}	
+	} else if wrapAlgorithm == "Ascon80pq" {
+		switch ec {
+		case elliptic.P256():
+			return oidPublicKeyAscon80pqP256
+		case elliptic.P384():
+			return oidPublicKeyAscon80pqP384
+		case elliptic.P521():
+			return oidPublicKeyAscon80pqP521
+		default:
+			return nil
+		}	
+	}	else {
+		return nil;
 	}
 }

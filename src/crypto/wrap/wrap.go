@@ -14,6 +14,7 @@ import (
 
 type PublicKey struct {
 	ClassicAlgorithm  elliptic.Curve
+	WrapAlgorithm string
 	WrappedPk []byte
 }
 
@@ -43,7 +44,29 @@ func WrapPublicKey(plaintext, key []byte, wrapAlgorithm string) (ciphertext []by
 	
 		ciphertextPk = aesgcm.Seal(nil, nonce, plaintext, nil)	
 	} else if wrapAlgorithm == "Ascon80pq" {
-		panic("Not yet implemented")
+
+		fmt.Printf("Wrapping Ascon\n\n")
+
+		if len(key) != 32 {
+			return nil, errors.New("wrapped cert: key should be 32 bytes long")
+		}
+	
+		block, err := aes.NewCipher(key)
+		if err != nil {
+			panic(err.Error())
+		}
+	
+		nonce = make([]byte, 12)
+		if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+			return nil, err
+		}
+	
+		aesgcm, err := cipher.NewGCM(block)
+		if err != nil {
+			return nil, err
+		}
+	
+		ciphertextPk = aesgcm.Seal(nil, nonce, plaintext, nil)			
 	} else {
 		return nil, errors.New("unknown wrap algorithm")
 	}
@@ -88,7 +111,22 @@ func UnwrapPublicKey(ciphertext, key []byte, wrapAlgorithm string) (plaintext []
 			return nil, err
 		}		
 	} else if wrapAlgorithm == "Ascon80pq" {
-		panic("not yet implemented")
+		fmt.Printf("Unwrapping Ascon\n\n")
+
+		block, err := aes.NewCipher(key)
+		if err != nil {
+			return nil, err
+		}
+
+		aesgcm, err := cipher.NewGCM(block)
+		if err != nil {
+			return nil, err
+		}
+
+		plaintext, err = aesgcm.Open(nil, nonce, wrappedPk, nil)
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		return nil, errors.New("unknown wrap algorithm")
 	}
