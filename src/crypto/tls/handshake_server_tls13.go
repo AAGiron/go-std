@@ -11,6 +11,7 @@ import (
 	"crypto/kem"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/wrap"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -169,6 +170,18 @@ func (hs *serverHandshakeStateTLS13) processClientHello() error {
 
 	if hs.clientHello.certPSK.identities != nil {
 		fmt.Printf("\nProcessing ClientHello...\n\nClientHello CertPSK extension:\n  establishPsk: %t\n  label: %x\n\n", hs.clientHello.certPSK.establishPSK, hs.clientHello.certPSK.identities[0][:10])
+	}
+
+	if hs.clientHello.certPSK.establishPSK {
+		var found bool
+		for _, v := range supportedWrapAlgorithms {			
+			if v == hs.clientHello.certPSK.wrapAlgorithm {
+				found = true
+			}
+		}
+		if !found {
+			panic(fmt.Sprintf("server does not support wrap algorithm %s", hs.clientHello.certPSK.wrapAlgorithm))	
+		}		
 	}
 
 	hs.hello = new(serverHelloMsg)
@@ -1368,12 +1381,11 @@ func (hs *serverHandshakeStateTLS13) sendCertPSK() error {
 
 	m := new(newCertPSKMsgTLS13)
 	
-	/* --------------------------------- Início --------------------------------- */
+	/* ------------------------------------------------------------------ */
 
-	// Este trecho de código é necessário para geração do state, que será 
-	// cifrado e usado como label/identidade da PSK. Foi feito desta forma
-	// com a intenção de imitar o que é feito no PSK do TLS
-
+	// This code snippet is necessary to generate the state, which will be encrypted
+	// and used as a label/identity of the Cert PSK. The Cert PSK label generation follows
+	// the same procedure than the TLS 1.3 PSK
 
 	var certsFromClient [][]byte
 	for _, cert := range c.peerCertificates {
@@ -1397,22 +1409,32 @@ func (hs *serverHandshakeStateTLS13) sendCertPSK() error {
 		return errors.New("wrapped cert: unknown ciphersuit")
 	}
 
-	/* ----------------------------------- Fim ---------------------------------- */	
+	/* --------------------------------------------------------------------- */	
 		
 	var err error
 
-	m.label, err = c.encryptTicket(state.marshal())  // Atribuindo o label da PSK
+	m.label, err = c.encryptTicket(state.marshal())
 	if err != nil {
 		return err
 	}
 
-	m.nonce = make([]byte, 32)  // Qual deve ser o tamanho do nonce...?
+	m.nonce = make([]byte, 32)
 
 	if _, err := rand.Read(m.nonce); err != nil {
 		panic("wrapped cert: nonce generation failed: " + err.Error())
 	}
-	
 
+	var pskLen int	
+	if hs.clientHello.certPSK.wrapAlgorithm == "AES256" {
+		pskLen = cipherSuite.hash.Size()		
+	} else if hs.clientHello.certPSK.wrapAlgorithm == "Ascon80pq" {
+		pskLen = wrap.CRYPTO_KEYBYTES		
+	} else {
+		return fmt.Errorf("could not send CertPSKMsg due to unknown wrap algorithm: %s", hs.clientHello.certPSK.wrapAlgorithm)
+	}
+
+	m.wrapAlgorithm = hs.clientHello.certPSK.wrapAlgorithm
+	
 	if _, err := c.writeRecord(recordTypeHandshake, m.marshal()); err != nil {
 		return err
 	}
@@ -1422,11 +1444,13 @@ func (hs *serverHandshakeStateTLS13) sendCertPSK() error {
 	certPSKMasterSecret := hs.suite.deriveSecret(hs.masterSecret,
 		wrappedCertLabel, hs.transcript)
 
+	
+	
 	psk := cipherSuite.expandLabel(certPSKMasterSecret, "cert psk",
-		m.nonce, cipherSuite.hash.Size())
+		m.nonce, pskLen)
 
 	// dbKey will be the Cert PSK Label
-	if err := certPSKWriteToFile(c.conn.RemoteAddr().String(), m.label, psk, false, c.config.PSKDBPath); err != nil {
+	if err := certPSKWriteToFile("", m.label, psk, m.wrapAlgorithm, false, c.config.PSKDBPath); err != nil {
 		return err
 	}
 

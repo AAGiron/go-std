@@ -332,7 +332,10 @@ func (m *clientHelloMsg) marshal() []byte {
 								b.AddBytes(identity)
 							})
 						}
-					})				
+					})
+					b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
+						b.AddBytes([]byte(m.certPSK.wrapAlgorithm))
+					})
 				})								
 			}
 
@@ -673,6 +676,7 @@ func (m *clientHelloMsg) unmarshal(data []byte) bool {
 		case extensionCertPSK:
 			var identities cryptobyte.String
 			var establish uint8
+			var wrapAlgorithmBytes []byte
 
 			if !extData.ReadUint8(&establish) {
 				return false
@@ -696,6 +700,12 @@ func (m *clientHelloMsg) unmarshal(data []byte) bool {
 				}
 				m.certPSK.identities = append(m.certPSK.identities, certPSKIdentity)
 			}
+
+			if !readUint16LengthPrefixed(&extData, &wrapAlgorithmBytes) {
+				return false
+			}
+
+			m.certPSK.wrapAlgorithm = string(wrapAlgorithmBytes)
 		
 		case extensionEarlyData:
 			// RFC 8446, Section 4.2.10
@@ -1262,7 +1272,8 @@ func (m *newSessionTicketMsgTLS13) unmarshal(data []byte) bool {
 type newCertPSKMsgTLS13 struct {
 	raw          []byte
 	nonce        []byte
-	label        []byte	
+	label        []byte
+	wrapAlgorithm string	
 }
 
 
@@ -1279,6 +1290,9 @@ func (m *newCertPSKMsgTLS13) marshal() []byte {
 		})
 		b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
 			b.AddBytes(m.label)
+		})
+		b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
+			b.AddBytes([]byte(m.wrapAlgorithm))
 		})						
 	})
 
@@ -1290,12 +1304,17 @@ func (m *newCertPSKMsgTLS13) unmarshal(data []byte) bool {
 	*m = newCertPSKMsgTLS13{raw: data}
 	s := cryptobyte.String(data)
 
+	var wrapAlgorithmBytes []byte
+
 	if !s.Skip(4) ||  // message type and uint24 length field
 		!readUint8LengthPrefixed(&s, &m.nonce) ||
 		!readUint16LengthPrefixed(&s, &m.label) ||
+		!readUint16LengthPrefixed(&s, &wrapAlgorithmBytes) ||
 		!s.Empty() {
 		return false
 	}
+
+	m.wrapAlgorithm = string(wrapAlgorithmBytes)
 
 	return true
 }

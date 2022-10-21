@@ -345,7 +345,8 @@ func (c *Conn) clientHandshake() (err error) {
 		if pskLabel == nil {			
 			fmt.Printf("Client does not have an agreed Cert PSK with this server.\nClient is goint to establish a Cert PSK in this Handshake\n\n")  // HS Prints
 			certPSKExt = certPSKExtension{
-				establishPSK: true,				
+				establishPSK: true,
+				wrapAlgorithm: c.config.WrapAlgorithm,
 			}
 		} else {			
 			fmt.Printf("Client does have an agreed Cert PSK with this server:\n\n")  // HS Prints
@@ -360,6 +361,8 @@ func (c *Conn) clientHandshake() (err error) {
 			fmt.Printf("Client will send the PSK label in his ClientHello\n\n")  // HS Prints
 		}		
 	}
+
+	fmt.Printf("CertPSKExt: %s\n\n", certPSKExt.wrapAlgorithm)
 
 	handshakeTimings := createTLS13ClientHandshakeTimingInfo(c.config.Time)
 	c.clientHandshakeSizes = TLS13ClientHandshakeSizes{}

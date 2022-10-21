@@ -328,6 +328,10 @@ var supportedSignatureAlgorithmsDC = []SignatureScheme{
 	KEMTLSWithNTRU_HPS_2048_509, KEMTLSWithNTRU_HPS_2048_677, KEMTLSWithNTRU_HPS_4096_821, KEMTLSWithNTRU_HPS_4096_1229, KEMTLSWithNTRU_HRSS_701, KEMTLSWithNTRU_HRSS_1373,	
 }
 
+var supportedWrapAlgorithms = []string {
+	"AES256","Ascon80pq",
+}
+
 // helloRetryRequestRandom is set as the Random value of a ServerHello
 // to signal that the message is actually a HelloRetryRequest.
 var helloRetryRequestRandom = []byte{ // See RFC 8446, Section 4.1.3.
@@ -1162,6 +1166,10 @@ type Config struct {
 	// PreQuantumScenario is true if we are simulating a TLS handshake in the pre-quantum scenario
 	// of the PKI Extended Lifetime Period proposal
 	PreQuantumScenario bool
+
+	// WrapAlgorithm is the wrap algorithm that the client is willing to use in the PKIELP proposal.
+	// WrapAlgorithm is used exclusively by the client, which will send it through his ClientHello.certPSK
+	WrapAlgorithm string
 }
 
 const (
@@ -1258,6 +1266,7 @@ func (c *Config) Clone() *Config {
 		TruststorePath: 						 c.TruststorePath,
 		TruststorePassword: 				 c.TruststorePassword,
 		PreQuantumScenario:          c.PreQuantumScenario,
+		WrapAlgorithm:               c.WrapAlgorithm,
 	}
 }
 
@@ -2101,7 +2110,7 @@ func getMessageLength(msg []byte) (uint32, error) {
 	return msg_size, nil
 }
 
-func certPSKWriteToFile(peerIP string, pskLabelBytes, pskBytes []byte, isClient bool, pskDBPath string) error {
+func certPSKWriteToFile(peerIP string, pskLabelBytes, pskBytes []byte, wrapAlgorithm string, isClient bool, pskDBPath string) error {
 
 	pskLabel := hex.EncodeToString(pskLabelBytes)
 	psk := hex.EncodeToString(pskBytes)
@@ -2120,9 +2129,9 @@ func certPSKWriteToFile(peerIP string, pskLabelBytes, pskBytes []byte, isClient 
 	var rec []string
 
 	if isClient {
-		rec = []string{peerIP, pskLabel, psk} 
+		rec = []string{peerIP, pskLabel, psk, wrapAlgorithm} 
 	} else {
-		rec = []string{pskLabel, psk}
+		rec = []string{pskLabel, psk, wrapAlgorithm}
 	}
 
 	if err := csvwriter.Write(rec); err != nil {
@@ -2137,4 +2146,5 @@ func certPSKWriteToFile(peerIP string, pskLabelBytes, pskBytes []byte, isClient 
 type certPSKExtension struct {
 	establishPSK bool  // The client will set it to true when it wants to establish a new PSK
 	identities [][]byte
+	wrapAlgorithm string
 }

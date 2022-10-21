@@ -1219,11 +1219,20 @@ func (c *Conn) handleNewCertPSK(msg *newCertPSKMsgTLS13) error {
 		return c.sendAlert(alertInternalError)
 	}
 
+	var pskLen int	
+	if msg.wrapAlgorithm == "AES256" {
+		pskLen = cipherSuite.hash.Size()		
+	} else if msg.wrapAlgorithm == "Ascon80pq" {
+		pskLen = wrap.CRYPTO_KEYBYTES
+	} else {
+		return fmt.Errorf("could not handle NewCertPSKMsg due to unknown wrap algorithm: %s", msg.wrapAlgorithm)
+	}
+
 	// Compute the cert PSK
 	psk := cipherSuite.expandLabel(c.certPSKMasterSecret, "cert psk",
-		msg.nonce, cipherSuite.hash.Size())
+		msg.nonce, pskLen)
 
-	if err := certPSKWriteToFile(c.conn.RemoteAddr().String(), msg.label, psk, true, c.config.PSKDBPath); err != nil {
+	if err := certPSKWriteToFile(c.conn.RemoteAddr().String(), msg.label, psk, msg.wrapAlgorithm, true, c.config.PSKDBPath); err != nil {
 		return err
 	}
 

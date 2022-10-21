@@ -19,8 +19,8 @@ type PublicKey struct {
 }
 
 func WrapPublicKey(plaintext, key []byte, wrapAlgorithm string) (ciphertext []byte, err error) {
+	var ciphertextPk []byte	
 	var nonce []byte
-	var ciphertextPk []byte
 
 	if wrapAlgorithm == "AES256" {
 		if len(key) != 32 {
@@ -30,43 +30,26 @@ func WrapPublicKey(plaintext, key []byte, wrapAlgorithm string) (ciphertext []by
 		block, err := aes.NewCipher(key)
 		if err != nil {
 			panic(err.Error())
-		}
-	
-		nonce = make([]byte, 12)
-		if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-			return nil, err
-		}
+		}		
 	
 		aesgcm, err := cipher.NewGCM(block)
 		if err != nil {
+			return nil, err
+		}
+
+		nonce = make([]byte, 12)
+		if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
 			return nil, err
 		}
 	
 		ciphertextPk = aesgcm.Seal(nil, nonce, plaintext, nil)	
 	} else if wrapAlgorithm == "Ascon80pq" {
-
-		fmt.Printf("Wrapping Ascon\n\n")
-
-		if len(key) != 32 {
-			return nil, errors.New("wrapped cert: key should be 32 bytes long")
-		}
-	
-		block, err := aes.NewCipher(key)
-		if err != nil {
-			panic(err.Error())
-		}
-	
-		nonce = make([]byte, 12)
-		if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-			return nil, err
-		}
-	
-		aesgcm, err := cipher.NewGCM(block)
+		var err error
+		
+		ciphertextPk, nonce, err = ascon80pqEncrypt(plaintext, key)
 		if err != nil {
 			return nil, err
-		}
-	
-		ciphertextPk = aesgcm.Seal(nil, nonce, plaintext, nil)			
+		}		
 	} else {
 		return nil, errors.New("unknown wrap algorithm")
 	}
@@ -111,19 +94,7 @@ func UnwrapPublicKey(ciphertext, key []byte, wrapAlgorithm string) (plaintext []
 			return nil, err
 		}		
 	} else if wrapAlgorithm == "Ascon80pq" {
-		fmt.Printf("Unwrapping Ascon\n\n")
-
-		block, err := aes.NewCipher(key)
-		if err != nil {
-			return nil, err
-		}
-
-		aesgcm, err := cipher.NewGCM(block)
-		if err != nil {
-			return nil, err
-		}
-
-		plaintext, err = aesgcm.Open(nil, nonce, wrappedPk, nil)
+		plaintext, err = ascon80pqDecrypt(wrappedPk, nonce, key)
 		if err != nil {
 			return nil, err
 		}
