@@ -59,8 +59,6 @@ func ascon80pqEncrypt(plaintext, key []byte) (goCiphertextBytes []byte, nonce []
 
 	goCiphertextBytes = C.GoBytes(unsafe.Pointer(ciphertextBytes), C.int(ciphertextLen))
 
-	fmt.Printf("Encrypt:\n\tPlaintext: %x\n\tAssociated Data: %x\n\tNonce: %x\n\tKey: %x\n\tCiphertext: %x", plaintext[:15], associatedData[:15], nonce[:15], key[:15], goCiphertextBytes[:15])
-
 	return goCiphertextBytes, nonce, nil
 }
 
@@ -85,9 +83,7 @@ func ascon80pqDecrypt(ciphertext, nonce, key []byte) ([]byte, error) {
 		ret := C.crypto_aead_decrypt((*C.uchar)(ptr), &plaintextLen, &(zerobyte), ciphertextBytes, 
 		ciphertextLen, adBytes, alen, nonceBytes, keyBytes);
 
-		decryptedPlaintext := C.GoBytes(ptr, C.int(plaintextLen))
-
-		fmt.Printf("Decrypt:\n\tPlaintext: %x\n\tAssociated Data: %x\n\tNonce: %x\n\tKey: %x\n\tCiphertext: %x", decryptedPlaintext[:15], associatedData[:15], nonce[:15], key[:15], ciphertext[:15])
+		decryptedPlaintext := C.GoBytes(ptr, C.int(plaintextLen))		
 
 		if ret != 0 {
 			return nil, fmt.Errorf("ascon80pq decryption failed with error code %d", ret)
