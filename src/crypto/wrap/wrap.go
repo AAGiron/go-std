@@ -18,6 +18,23 @@ type PublicKey struct {
 	WrappedPk []byte
 }
 
+func (pub *PublicKey) GetNameString() string {
+	var classicEC string
+	
+	switch pub.ClassicAlgorithm {
+	case elliptic.P256():
+		classicEC = "P256"
+	case elliptic.P384():
+		classicEC = "P384"
+	case elliptic.P521():
+		classicEC = "P521"
+	default:
+		classicEC = "Unknown"
+	}
+
+	return pub.WrapAlgorithm + "_ECDSA-" + classicEC
+}
+
 func WrapPublicKey(plaintext, key []byte, wrapAlgorithm string) (ciphertext []byte, err error) {
 	var ciphertextPk []byte	
 	var nonce []byte

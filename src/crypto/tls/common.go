@@ -495,6 +495,9 @@ type ConnectionState struct {
 
 	ClientHandshakeSizes TLS13ClientHandshakeSizes
 	ServerHandshakeSizes TLS13ServerHandshakeSizes
+
+	// Certificate sent by the server in the PKIELP proposal. This field is only set in the server side.
+	PKIELPServerCertificate []byte
 }
 
 // ExportKeyingMaterial returns length bytes of exported key material in a new

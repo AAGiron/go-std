@@ -732,7 +732,8 @@ func (hs *serverHandshakeStateTLS13) pickCertificate() error {
 			return err
 		}
 
-		fmt.Printf("Client sent a Cert PSK Label in it's ClientHello.\nRecovering the corresponding Wrapped Certificate:\n  Subject Key ID: %x\n\n", certLeaf.SubjectKeyId[:10])  // HS Prints		
+		fmt.Printf("Client sent a Cert PSK Label in it's ClientHello.\nRecovering the corresponding Wrapped Certificate:\n  Subject Key ID: %x\n\n", certLeaf.SubjectKeyId[:10])  // HS Prints
+		c.pkiELPServerCertificate = certificate.Certificate[0]
 
 	} else if c.config.WrappedCertEnabled && hs.clientHello.certPSK.establishPSK {
 		fmt.Printf("Wrapped Certificate Proposal is enabled\n\n")  // HS Prints
@@ -750,6 +751,7 @@ func (hs *serverHandshakeStateTLS13) pickCertificate() error {
 		}
 
 		fmt.Printf("Client did not sent a Cert PSK Label in it's ClientHello.\nUsing a classic certificate:\n  Subject Key ID: %x\n\n", certLeaf.SubjectKeyId[:10])  // HS Prints
+		c.pkiELPServerCertificate = certificate.Certificate[0]
 	} else {
 		certificate, err = c.config.getCertificate(clientHelloInfo(c, hs.clientHello))
 		if err != nil {

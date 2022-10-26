@@ -3059,7 +3059,6 @@ func CreateWrappedCertificateRequest(rand io.Reader, template *CertificateReques
 		return nil, errors.New("only ECDSA is supported for Wrapped CSR")
 	}
 
-	// wrappedPk, wrappedPKNonce, err := wrap.AES256Encrypt(publicKeyBytes, certPSK)
 	wrappedPk, err := wrap.WrapPublicKey(publicKeyBytes, certPSK, wrapAlgorithm)
 	if err != nil {
 		return nil, err

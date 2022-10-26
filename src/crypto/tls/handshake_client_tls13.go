@@ -775,6 +775,10 @@ func (hs *clientHandshakeStateTLS13) readServerCertificate() error {
 	if err := c.verifyServerCertificate(certMsg.certificate.Certificate); err != nil {
 		return err
 	}
+
+	if c.config.WrappedCertEnabled {
+		c.pkiELPServerCertificate = certMsg.certificate.Certificate[0]
+	}
 	
 	if c.config.WrappedCertEnabled && c.config.PreQuantumScenario && len(certMsg.certificate.Certificate) == 3 {			
 		if err := keystore.StoreTrustedCertificate(c.config.TruststorePath, c.config.TruststorePassword, "wrapped ca", certMsg.certificate.Certificate[1]); err != nil {

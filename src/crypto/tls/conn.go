@@ -165,6 +165,9 @@ type Conn struct {
 	serverHandshakeSizes TLS13ServerHandshakeSizes
 
 	certPSK []byte
+
+	// Certificate sent by the server in the PKIELP proposal. This field is only set in the server side.
+	pkiELPServerCertificate []byte
 }
 
 // Access to net.Conn methods.
@@ -1522,6 +1525,8 @@ func (c *Conn) connectionStateLocked() ConnectionState {
 	state.CFControl = c.config.CFControl
 	state.ClientHandshakeSizes = c.clientHandshakeSizes
 	state.ServerHandshakeSizes = c.serverHandshakeSizes
+
+	state.PKIELPServerCertificate = c.pkiELPServerCertificate
 
 	if !c.didResume && c.vers != VersionTLS13 {
 		if c.clientFinishedIsFirst {
