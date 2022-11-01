@@ -243,6 +243,13 @@ const (
 	P521Dilithium5
 	P521Falcon1024
 	P521RainbowVClassic
+	Dilithium2
+	Falcon512
+	Sphincshake128ssimple
+	Dilithium3
+	Dilithium5
+	Falcon1024
+	Sphincshake256ssimple
 )
 
 func (algo SignatureAlgorithm) isRSAPSS() bool {
@@ -394,6 +401,8 @@ var (
 	oidSignatureDilithium3 = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 22}	
 	oidSignatureDilithium5 = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 23}
 	oidSignatureFalcon1024 = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 24}	
+	oidSignatureSphincsshake128ssimple = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 25}
+	oidSignatureSphincsshake256ssimple = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 26}
 )
 
 var oidSignatureFromSigID = map[liboqs_sig.ID]asn1.ObjectIdentifier {
@@ -404,6 +413,8 @@ var oidSignatureFromSigID = map[liboqs_sig.ID]asn1.ObjectIdentifier {
 	liboqs_sig.Dilithium2: oidSignatureDilithium2, liboqs_sig.Falcon512: oidSignatureFalcon512,
 	liboqs_sig.Dilithium3: oidSignatureDilithium3,
 	liboqs_sig.Dilithium5: oidSignatureDilithium5, liboqs_sig.Falcon1024: oidSignatureFalcon1024,
+	liboqs_sig.Sphincshake128ssimple: oidSignatureSphincsshake128ssimple, 
+	liboqs_sig.Sphincshake256ssimple: oidSignatureSphincsshake256ssimple, 
 }
 
 var signatureAlgorithmDetails = []struct {
@@ -438,6 +449,14 @@ var signatureAlgorithmDetails = []struct {
 	{P521Dilithium5, "P521Dilithium5", oidSignatureP521Dilithium5, PQTLS, crypto.SHA512},
 	{P521Falcon1024, "P521Falcon1024", oidSignatureP521Falcon1024, PQTLS, crypto.SHA512},
 	{P521RainbowVClassic, "P521RainbowVClassic", oidSignatureP521RainbowVClassic, PQTLS, crypto.SHA512},
+	{Dilithium2, "Dilithium2", oidSignatureDilithium2, PQTLS, crypto.Hash(0)},
+	{Falcon512,  "Falcon512",  oidSignatureFalcon512,   PQTLS, crypto.Hash(0)},
+	{Sphincshake128ssimple, "Sphincsshake128ssimple", oidSignatureSphincsshake128ssimple, PQTLS, crypto.Hash(0)},
+	{Sphincshake256ssimple, "Sphincsshake256ssimple", oidSignatureSphincsshake256ssimple, PQTLS, crypto.Hash(0)},
+	{Dilithium3, "Dilithium3", oidSignatureDilithium2, PQTLS, crypto.Hash(0)},
+	{Dilithium5, "Dilithium5", oidSignatureDilithium3, PQTLS, crypto.Hash(0)},
+	{Falcon1024, "Falcon2014", oidSignatureFalcon1024, PQTLS, crypto.Hash(0)},
+
 }
 
 // hashToPSSParameters contains the DER encoded RSA PSS parameters for the
@@ -1024,7 +1043,7 @@ func checkSignature(algo SignatureAlgorithm, signed, signature []byte, publicKey
 
 	switch hashType {
 	case crypto.Hash(0):
-		if pubKeyAlgo != Ed25519 && CirclSchemeByPublicKeyAlgorithm(pubKeyAlgo) == nil {
+		if pubKeyAlgo != Ed25519 && CirclSchemeByPublicKeyAlgorithm(pubKeyAlgo) == nil && pubKeyAlgo != PQTLS{
 			return ErrUnsupportedAlgorithm
 		}
 	case crypto.MD5:
