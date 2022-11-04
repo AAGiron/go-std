@@ -51,13 +51,15 @@ func (c *Conn) serverHandshake() error {
 		hs := serverHandshakeStateTLS13{
 			c:                c,
 			clientHello:      clientHello,
-			handshakeTimings: createTLS13ServerHandshakeTimingInfo(c.config.Time),
-			WrappedCertsDB:   make(map[string]Certificate),
+			handshakeTimings: createTLS13ServerHandshakeTimingInfo(c.config.Time),			
 		}
 
-		if err := hs.loadAllWrappedCerts(c.config.PreQuantumScenario); err != nil {
-			return err			
-		}
+		if c.config.WrappedCertEnabled {
+			hs.WrappedCertsDB = make(map[string]Certificate)
+			if err := hs.loadAllWrappedCerts(c.config.PreQuantumScenario); err != nil {
+				return err
+			}		
+		}		
 		c.serverHandshakeSizes = TLS13ServerHandshakeSizes{}
 		
 		return hs.handshake()

@@ -66,6 +66,7 @@ import (
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/liboqs_sig"
 	"crypto/rsa"
 	"crypto/wrap"
 	"crypto/x509"
@@ -420,6 +421,19 @@ func X509KeyPair(certPEMBlock, keyPEMBlock []byte) (Certificate, error) {
 		}
 	case *wrap.PublicKey:
 		// empty statement
+	case *liboqs_sig.PublicKey:
+		priv, ok := cert.PrivateKey.(*liboqs_sig.PrivateKey)
+		if !ok {
+			return fail(errors.New("tls: private key type does not match public key type"))
+		}
+
+		privClassic, _, pubFromPriv := liboqs_sig.GetPrivateKeyMembers(priv)
+		_, pubPQC1 := liboqs_sig.GetPublicKeyMembers(pubFromPriv)
+		pubClassic, pubPQC2 := liboqs_sig.GetPublicKeyMembers(pub)
+
+		if !bytes.Equal(pubPQC1, pubPQC2) && (pubClassic.X.Cmp(privClassic.X) != 0 || pubClassic.Y.Cmp(privClassic.Y) != 0) {
+			return fail(errors.New("tls: private key does not match public key"))
+		}
 	default:
 		return fail(errors.New("tls: unknown public key algorithm"))
 	}
@@ -436,7 +450,7 @@ func parsePrivateKey(der []byte) (crypto.PrivateKey, error) {
 	}
 	if key, err := x509.ParsePKCS8PrivateKey(der); err == nil {
 		switch key := key.(type) {
-		case *rsa.PrivateKey, *ecdsa.PrivateKey, ed25519.PrivateKey, circlSign.PrivateKey:
+		case *rsa.PrivateKey, *ecdsa.PrivateKey, ed25519.PrivateKey, circlSign.PrivateKey, *liboqs_sig.PrivateKey:
 			return key, nil
 		default:
 			return nil, errors.New("tls: found unknown private key type in PKCS#8 wrapping")
