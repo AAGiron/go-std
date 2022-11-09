@@ -30,6 +30,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+
 	"golang.org/x/crypto/cryptobyte"
 )
 
@@ -672,6 +673,9 @@ const (
 	
 	PQTLS_Dilithium5 SignatureScheme = 0xfe84
 	PQTLS_Falcon1024 SignatureScheme = 0xfe85
+
+	PQTLS_sphincsshake128ssimple SignatureScheme = 0xfe86
+	PQTLS_sphincsshake256ssimple SignatureScheme = 0xfe87
 )
 
 // Liboqs Hybrids
@@ -714,11 +718,13 @@ var liboqsSigSignatureSchemeMap = map[liboqs_sig.ID]SignatureScheme {
 	
 	liboqs_sig.Dilithium2: PQTLS_Dilithium2, liboqs_sig.Falcon512: PQTLS_Falcon512,
 	liboqs_sig.Dilithium3: PQTLS_Dilithium3,
-	liboqs_sig.Dilithium5: PQTLS_Dilithium5, liboqs_sig.Falcon1024: PQTLS_Falcon1024,
+	liboqs_sig.Dilithium5: PQTLS_Dilithium5, liboqs_sig.Falcon1024: PQTLS_Falcon1024, 
+
+	liboqs_sig.Sphincshake128ssimple: PQTLS_sphincsshake128ssimple, liboqs_sig.Sphincshake256ssimple: PQTLS_sphincsshake256ssimple,
 }
 
 func isLiboqsSigSignature(scheme SignatureScheme) SignatureScheme {
-	if scheme >= PQTLS_P256_Dilithium2 && scheme <= PQTLS_Falcon1024 {
+	if scheme >= PQTLS_P256_Dilithium2 && scheme <= PQTLS_sphincsshake256ssimple {
 		return scheme
 	}
 	return 0

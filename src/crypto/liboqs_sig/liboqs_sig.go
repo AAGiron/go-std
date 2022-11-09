@@ -34,6 +34,9 @@ const (
 	
 	Dilithium5 ID = 0x227
 	Falcon1024 ID = 0x228
+
+	Sphincshake128ssimple ID = 0x229
+	Sphincshake256ssimple ID = 0x22A
 )
 
 const (
@@ -359,6 +362,8 @@ var SigIdtoPQCName = map[ID]string{
 	Dilithium2: "Dilithium2", Falcon512: "Falcon-512",
 	Dilithium3: "Dilithium3",
 	Dilithium5: "Dilithium5", Falcon1024: "Falcon-1024",
+	Sphincshake128ssimple: "sphincs+-shake256-128s-simple",
+	Sphincshake256ssimple: "sphincs+-SHAKE256-256s-simple",
 }
 
 var SigIdtoName = map[ID]string{
