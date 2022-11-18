@@ -7,9 +7,10 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"errors"
+	"io"
+
 	"github.com/open-quantum-safe/liboqs-go/oqs"
 	"golang.org/x/crypto/cryptobyte"
-	"io"
 )
 
 // ID identifies each type of Hybrid Signature.
@@ -18,14 +19,14 @@ type ID uint16
 const (
 	P256_Dilithium2 ID = 0x21c
 	P256_Falcon512 ID = 0x21d
-	P256_RainbowIClassic ID = 0x21e
+	P256_SphincsShake128sSimple ID = 0x21e
 	
 	P384_Dilithium3 ID = 0x21f
 	P384_RainbowIIIClassic ID = 0x220
 	
 	P521_Dilithium5 ID = 0x221
 	P521_Falcon1024 ID = 0x222
-	P521_RainbowVClassic ID = 0x223
+	P521_SphincsShake256sSimple ID = 0x223
 
 	Dilithium2 ID = 0x224
 	Falcon512 ID = 0x225
@@ -35,8 +36,8 @@ const (
 	Dilithium5 ID = 0x227
 	Falcon1024 ID = 0x228
 
-	Sphincshake128ssimple ID = 0x229
-	Sphincshake256ssimple ID = 0x22A
+	SphincsShake128sSimple ID = 0x229
+	SphincsShake256sSimple ID = 0x22A
 )
 
 const (
@@ -324,11 +325,11 @@ func GetPublicKeyMembers(pub *PublicKey) (*ecdsa.PublicKey, []byte){
 // Returns classical curve and public key size for the corresponding curve
 func ClassicFromSig(sigId ID) (elliptic.Curve, int) {
 	switch true {
-	case sigId >= P256_Dilithium2 && sigId <= P256_RainbowIClassic:
+	case sigId >= P256_Dilithium2 && sigId <= P256_SphincsShake128sSimple:
 		return elliptic.P256(), 65
 	case sigId >= P384_Dilithium3 && sigId <= P384_RainbowIIIClassic:
 		return elliptic.P384(), 97
-	case sigId >= P521_Dilithium5 && sigId <= P521_RainbowVClassic:
+	case sigId >= P521_Dilithium5 && sigId <= P521_SphincsShake256sSimple:
 		return elliptic.P521(), 133
 	default:
 		return nil, 0
@@ -337,11 +338,11 @@ func ClassicFromSig(sigId ID) (elliptic.Curve, int) {
 
 func HashFromSig(sigId ID) (crypto.Hash, error) {
 	switch true {
-	case sigId >= P256_Dilithium2 && sigId <= P256_RainbowIClassic:
+	case sigId >= P256_Dilithium2 && sigId <= P256_SphincsShake128sSimple:
 		return crypto.SHA256, nil
 	case sigId >= P384_Dilithium3 && sigId <= P384_RainbowIIIClassic:
 		return crypto.SHA384, nil
-	case sigId >= P521_Dilithium5 && sigId <= P521_RainbowVClassic:
+	case sigId >= P521_Dilithium5 && sigId <= P521_SphincsShake256sSimple:
 		return crypto.SHA512, nil
 	default:
 		return crypto.SHA256, errors.New("unknown signature ID")
@@ -349,27 +350,27 @@ func HashFromSig(sigId ID) (crypto.Hash, error) {
 }
 
 func IsSigHybrid(sigID ID) bool {
-	if sigID >= P256_Dilithium2 && sigID <= P521_RainbowVClassic {
+	if sigID >= P256_Dilithium2 && sigID <= P521_SphincsShake256sSimple {
 		return true
 	}
 	return false
 }
 
 var SigIdtoPQCName = map[ID]string{
-	P256_Dilithium2: "Dilithium2", P256_Falcon512: "Falcon-512", P256_RainbowIClassic: "Rainbow-I-Classic",
+	P256_Dilithium2: "Dilithium2", P256_Falcon512: "Falcon-512", P256_SphincsShake128sSimple: "sphincs+-shake256-128s-simple",
 	P384_Dilithium3: "Dilithium3", P384_RainbowIIIClassic: "Rainbow-III-Classic",
-	P521_Dilithium5: "Dilithium5", P521_Falcon1024: "Falcon-1024", P521_RainbowVClassic: "Rainbow-V-Classic",
+	P521_Dilithium5: "Dilithium5", P521_Falcon1024: "Falcon-1024", P521_SphincsShake256sSimple: "sphincs+-SHAKE256-256s-simple",
 	Dilithium2: "Dilithium2", Falcon512: "Falcon-512",
 	Dilithium3: "Dilithium3",
 	Dilithium5: "Dilithium5", Falcon1024: "Falcon-1024",
-	Sphincshake128ssimple: "sphincs+-shake256-128s-simple",
-	Sphincshake256ssimple: "sphincs+-SHAKE256-256s-simple",
+	SphincsShake128sSimple: "sphincs+-shake256-128s-simple",
+	SphincsShake256sSimple: "sphincs+-SHAKE256-256s-simple",
 }
 
 var SigIdtoName = map[ID]string{
-	P256_Dilithium2: "P256_Dilithium2", P256_Falcon512: "P256_Falcon-512", P256_RainbowIClassic: "P256_Rainbow-I-Classic",
+	P256_Dilithium2: "P256_Dilithium2", P256_Falcon512: "P256_Falcon-512", P256_SphincsShake128sSimple: "P256_sphincs+-shake256-128s-simple",
 	P384_Dilithium3: "P384_Dilithium3", P384_RainbowIIIClassic: "P384_Rainbow-III-Classic",
-	P521_Dilithium5: "P521_Dilithium5", P521_Falcon1024: "P521_Falcon-1024", P521_RainbowVClassic: "P521_Rainbow-V-Classic",
+	P521_Dilithium5: "P521_Dilithium5", P521_Falcon1024: "P521_Falcon-1024", P521_SphincsShake256sSimple: "P521_sphincs+-SHAKE256-256s-simple",
 	Dilithium2: "Dilithium2", Falcon512: "Falcon-512",
 	Dilithium3: "Dilithium3",
 	Dilithium5: "Dilithium5", Falcon1024: "Falcon-1024",
