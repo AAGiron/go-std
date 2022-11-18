@@ -6,11 +6,13 @@ package tls
 
 import (
 	circlSign "circl/sign"
+	"os"
 
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/kem"
+	"crypto/liboqs_sig"
 	"crypto/rsa"
 	"crypto/subtle"
 	"crypto/x509"
@@ -20,7 +22,6 @@ import (
 	"io"
 	"sync/atomic"
 	"time"
-	"crypto/liboqs_sig"
 )
 
 // serverHandshakeState contains details of a server handshake in progress.
@@ -59,7 +60,17 @@ func (c *Conn) serverHandshake() error {
 			if err := hs.loadAllWrappedCerts(c.config.PreQuantumScenario); err != nil {
 				return err
 			}		
-		}		
+		}
+		
+		if c.config.OCSPResponseFilePath != "" {
+			ocspResponse, err := os.ReadFile(c.config.OCSPResponseFilePath)
+			if err != nil {
+				panic(err)
+			}
+
+			hs.ocspResponse = ocspResponse
+		}
+		
 		c.serverHandshakeSizes = TLS13ServerHandshakeSizes{}
 		
 		return hs.handshake()

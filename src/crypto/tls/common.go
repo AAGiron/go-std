@@ -1179,6 +1179,11 @@ type Config struct {
 	// WrapAlgorithm is the wrap algorithm that the client is willing to use in the PKIELP proposal.
 	// WrapAlgorithm is used exclusively by the client, which will send it through his ClientHello.certPSK
 	WrapAlgorithm string
+
+	// Path to the file where the OCSP Response made by the Pebble was written to. If this string is not empty,
+	// the file will be read and the OCSP Response from it will be sent through OCSP stapling in the handshake.
+	OCSPResponseFilePath string
+
 }
 
 const (
@@ -1276,6 +1281,7 @@ func (c *Config) Clone() *Config {
 		TruststorePassword: 				 c.TruststorePassword,
 		PreQuantumScenario:          c.PreQuantumScenario,
 		WrapAlgorithm:               c.WrapAlgorithm,
+		OCSPResponseFilePath:        c.OCSPResponseFilePath,
 	}
 }
 

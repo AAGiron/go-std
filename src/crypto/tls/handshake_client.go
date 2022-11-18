@@ -413,6 +413,9 @@ func (c *Conn) clientHandshake() (err error) {
 			}
 		}()
 	}
+	
+	// fmt.Printf("Hello.OCSP: ")
+	// fmt.Println(hello.ocspStapling)
 
 	if _, err := c.writeRecord(recordTypeHandshake, hello.marshal()); err != nil {
 		return err

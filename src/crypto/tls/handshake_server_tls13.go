@@ -60,6 +60,7 @@ type serverHandshakeStateTLS13 struct {
 	handshakeTimings CFEventTLS13ServerHandshakeTimingInfo
 
 	WrappedCertsDB map[string]Certificate
+	ocspResponse []byte
 }
 
 // processDelegatedCredentialFromClient unmarshals the DelegatedCredential
@@ -726,6 +727,8 @@ func (hs *serverHandshakeStateTLS13) pickCertificate() error {
 		if certificate.Certificate == nil {
 			return errors.New("wrapped certificate not found")
 		}
+
+		certificate.OCSPStaple = hs.ocspResponse
 		
 		certLeaf, err := certificate.leaf()
 		if err != nil {
@@ -744,6 +747,8 @@ func (hs *serverHandshakeStateTLS13) pickCertificate() error {
 		if certificate.Certificate == nil {
 			return errors.New("classic server's certificate not found")
 		}
+			
+		certificate.OCSPStaple = hs.ocspResponse		
 
 		certLeaf, err := certificate.leaf()
 		if err != nil {
