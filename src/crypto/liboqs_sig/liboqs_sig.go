@@ -110,10 +110,26 @@ func (priv *PrivateKey) Sign(rand io.Reader, digest []byte, opts crypto.SignerOp
 }
 
 func (priv *PrivateKey) MarshalBinary() []byte {
-	var b cryptobyte.Builder	
+	var b cryptobyte.Builder
+	var classicPrivBytes []byte	
 
 	if priv.classic != nil {
-		panic("marshalling of hybrid private keys not supported")
+		// 	SigId ID
+		b.AddUint16(uint16(priv.SigId))
+		//classic
+		classicPrivBytes = elliptic.MarshalPrivateKey(priv.classic.PublicKey.Curve, priv.classic.PublicKey.X, priv.classic.PublicKey.Y, priv.classic.D)
+		b.AddUint24LengthPrefixed(func(b *cryptobyte.Builder) {
+			b.AddBytes(classicPrivBytes)
+		})
+		//pqc
+		b.AddUint24LengthPrefixed(func(b *cryptobyte.Builder) {
+			b.AddBytes(priv.pqc)
+		})
+		//hybridPub
+		b.AddUint24LengthPrefixed(func(b *cryptobyte.Builder) {
+			b.AddBytes(priv.hybridPub.MarshalBinary())
+		})		
+
 	} else {
 		b.AddUint16(uint16(priv.SigId))
 		b.AddUint24LengthPrefixed(func(b *cryptobyte.Builder) {
@@ -137,11 +153,38 @@ func (priv *PrivateKey) UnmarshalBinary(raw []byte) error {
 	priv.SigId = ID(sigId)
 
 	if IsSigHybrid(priv.SigId) {
-		panic("unmarshalling of hybrid private keys not supported")
+		var classicPrivBytes []byte
+		priv.classic = new(ecdsa.PrivateKey)
+
+		if	!readUint24LengthPrefixed(&s, &classicPrivBytes) ||
+			!readUint24LengthPrefixed(&s, &priv.pqc) ||
+			!readUint24LengthPrefixed(&s, &pubBytes) ||
+			!s.Empty() {
+			return errors.New("error while parsing bytes")
+		}
+		// hybridPub
+		pub := new(PublicKey)
+		if err := pub.UnmarshalBinary(pubBytes); err != nil {
+			return err
+		}
+
+		priv.hybridPub = pub
+		
+		// classic
+		xPub, yPub, d := elliptic.UnmarshalPrivateKey(pub.classic.Curve, classicPrivBytes)	
+		classicPub := ecdsa.PublicKey{
+			X: xPub,
+			Y: yPub,
+		}
+		classicPub.Curve, _ = ClassicFromSig(pub.SigId) 
+		priv.classic.PublicKey = classicPub
+		priv.classic.D = d
+		
+	
 	} else {
-		if !readUint24LengthPrefixed(&s, &priv.pqc) ||
-			 !readUint24LengthPrefixed(&s, &pubBytes) ||
-			 !s.Empty() {
+		if	!readUint24LengthPrefixed(&s, &priv.pqc) ||
+			!readUint24LengthPrefixed(&s, &pubBytes) ||
+			!s.Empty() {
 			return errors.New("error while parsing bytes")
 		}
 
@@ -374,6 +417,8 @@ var SigIdtoName = map[ID]string{
 	Dilithium2: "Dilithium2", Falcon512: "Falcon-512",
 	Dilithium3: "Dilithium3",
 	Dilithium5: "Dilithium5", Falcon1024: "Falcon-1024",
+	SphincsShake128sSimple: "sphincs+-shake256-128s-simple",
+	SphincsShake256sSimple: "sphincs+-SHAKE256-256s-simple",
 }
 
 func NameToSigID(sigName string) ID {

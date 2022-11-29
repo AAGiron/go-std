@@ -324,6 +324,23 @@ func Marshal(curve Curve, x, y *big.Int) []byte {
 	return ret
 }
 
+func MarshalPrivateKey(curve Curve, x, y, D *big.Int) []byte {
+
+	pubBytesLen := (curve.Params().BitSize + 7) / 8
+
+	dBytesLen   := (curve.Params().N.BitLen()+7) / 8
+	
+	ret := make([]byte, 1+2*pubBytesLen+dBytesLen)
+	ret[0] = 4
+
+	x.FillBytes(ret[1 : 1+pubBytesLen])
+	y.FillBytes(ret[1+pubBytesLen   : 1+2*pubBytesLen])
+	D.FillBytes(ret[1+2*pubBytesLen : 1+2*pubBytesLen+dBytesLen])
+
+	return ret
+
+}
+
 // MarshalCompressed converts a point on the curve into the compressed form
 // specified in section 4.3.6 of ANSI X9.62.
 func MarshalCompressed(curve Curve, x, y *big.Int) []byte {
@@ -353,6 +370,30 @@ func Unmarshal(curve Curve, data []byte) (x, y *big.Int) {
 	}
 	if !curve.IsOnCurve(x, y) {
 		return nil, nil
+	}
+	return
+}
+
+func UnmarshalPrivateKey(curve Curve, data []byte) (x, y, d *big.Int) {
+	pubBytesLen := (curve.Params().BitSize + 7) / 8
+	dBytesLen   := (curve.Params().N.BitLen() + 7) / 8
+
+	if len(data) != 1+2*pubBytesLen+dBytesLen {
+		return nil, nil, nil
+	}
+	if data[0] != 4 { // uncompressed form
+		return nil, nil, nil
+	}
+	p := curve.Params().P
+	x = new(big.Int).SetBytes(data[1 : 1+pubBytesLen])
+	y = new(big.Int).SetBytes(data[1+pubBytesLen : 1+2*pubBytesLen])
+	d = new(big.Int).SetBytes(data[1+2*pubBytesLen:])
+	
+	if x.Cmp(p) >= 0 || y.Cmp(p) >= 0 {
+		return nil, nil, nil
+	}
+	if !curve.IsOnCurve(x, y) {
+		return nil, nil, nil
 	}
 	return
 }

@@ -294,7 +294,7 @@ var supportedSignatureAlgorithms = []SignatureScheme{
 
 	// Liboqs Signature
 	PQTLS_P256_Dilithium2, PQTLS_P256_Falcon512, PQTLS_P256_Sphincshake128ssimple, PQTLS_P384_Dilithium3, PQTLS_P384_RainbowIIIClassic, PQTLS_P521_Dilithium5, PQTLS_P521_Falcon1024, PQTLS_P521_Sphincshake256ssimple,
-	PQTLS_Dilithium2, PQTLS_Falcon512, PQTLS_Dilithium3, PQTLS_P521_Dilithium5, PQTLS_P521_Falcon1024,
+	PQTLS_Dilithium2, PQTLS_Falcon512, PQTLS_Dilithium3, PQTLS_P521_Dilithium5, PQTLS_P521_Falcon1024, PQTLS_sphincsshake128ssimple, PQTLS_sphincsshake256ssimple,
 
 }
 
@@ -718,6 +718,8 @@ var liboqsSigSignatureSchemeMap = map[liboqs_sig.ID]SignatureScheme {
 	liboqs_sig.Dilithium2: PQTLS_Dilithium2, liboqs_sig.Falcon512: PQTLS_Falcon512,
 	liboqs_sig.Dilithium3: PQTLS_Dilithium3,
 	liboqs_sig.Dilithium5: PQTLS_Dilithium5, liboqs_sig.Falcon1024: PQTLS_Falcon1024, 
+	liboqs_sig.SphincsShake128sSimple: PQTLS_sphincsshake128ssimple,
+	liboqs_sig.SphincsShake256sSimple: PQTLS_sphincsshake256ssimple,
 }
 
 func isLiboqsSigSignature(scheme SignatureScheme) SignatureScheme {
