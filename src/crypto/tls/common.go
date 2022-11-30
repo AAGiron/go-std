@@ -294,8 +294,8 @@ var supportedSignatureAlgorithms = []SignatureScheme{
 	KEMTLSWithNTRU_HPS_2048_509, KEMTLSWithNTRU_HPS_2048_677, KEMTLSWithNTRU_HPS_4096_821, KEMTLSWithNTRU_HPS_4096_1229, KEMTLSWithNTRU_HRSS_701, KEMTLSWithNTRU_HRSS_1373,	
 
 	// Liboqs Signature
-	PQTLS_P256_Dilithium2, PQTLS_P256_Falcon512, PQTLS_P256_RainbowIClassic, PQTLS_P384_Dilithium3, PQTLS_P384_RainbowIIIClassic, PQTLS_P521_Dilithium5, PQTLS_P521_Falcon1024, PQTLS_P521_RainbowVClassic,
-	PQTLS_Dilithium2, PQTLS_Falcon512, PQTLS_Dilithium3, PQTLS_P521_Dilithium5, PQTLS_P521_Falcon1024,
+	PQTLS_P256_Dilithium2, PQTLS_P256_Falcon512, PQTLS_P256_Sphincshake128ssimple, PQTLS_P384_Dilithium3, PQTLS_P384_RainbowIIIClassic, PQTLS_P521_Dilithium5, PQTLS_P521_Falcon1024, PQTLS_P521_Sphincshake256ssimple,
+	PQTLS_Dilithium2, PQTLS_Falcon512, PQTLS_Dilithium3, PQTLS_P521_Dilithium5, PQTLS_P521_Falcon1024, PQTLS_sphincsshake128ssimple, PQTLS_sphincsshake256ssimple,
 
 }
 
@@ -656,12 +656,12 @@ const (
 	// Liboqs Hybrid Signatures
 	PQTLS_P256_Dilithium2 SignatureScheme = 0xfe78
 	PQTLS_P256_Falcon512 SignatureScheme = 0xfe79
-	PQTLS_P256_RainbowIClassic SignatureScheme = 0xfe7a
+	PQTLS_P256_Sphincshake128ssimple SignatureScheme = 0xfe7a
 	PQTLS_P384_Dilithium3 SignatureScheme = 0xfe7b
 	PQTLS_P384_RainbowIIIClassic SignatureScheme = 0xfe7c
 	PQTLS_P521_Dilithium5 SignatureScheme = 0xfe7d
 	PQTLS_P521_Falcon1024 SignatureScheme = 0xfe7e
-	PQTLS_P521_RainbowVClassic SignatureScheme = 0xfe7f
+	PQTLS_P521_Sphincshake256ssimple SignatureScheme = 0xfe7f
 
 	KEMTLSWithP256_Classic_McEliece_348864 SignatureScheme = 0xfe80
 
@@ -712,15 +712,15 @@ func liboqsKEMFromSignature(scheme SignatureScheme) kem.ID {
 // Hybrid PQTLS Authentication
 
 var liboqsSigSignatureSchemeMap = map[liboqs_sig.ID]SignatureScheme {
-	liboqs_sig.P256_Dilithium2: PQTLS_P256_Dilithium2, liboqs_sig.P256_Falcon512: PQTLS_P256_Falcon512, liboqs_sig.P256_RainbowIClassic: PQTLS_P256_RainbowIClassic, 
+	liboqs_sig.P256_Dilithium2: PQTLS_P256_Dilithium2, liboqs_sig.P256_Falcon512: PQTLS_P256_Falcon512, liboqs_sig.P256_SphincsShake128sSimple: PQTLS_P256_Sphincshake128ssimple, 
 	liboqs_sig.P384_Dilithium3: PQTLS_P384_Dilithium3, liboqs_sig.P384_RainbowIIIClassic: PQTLS_P384_RainbowIIIClassic, 
-	liboqs_sig.P521_Dilithium5: PQTLS_P521_Dilithium5, liboqs_sig.P521_Falcon1024: PQTLS_P521_Falcon1024, liboqs_sig.P521_RainbowVClassic: PQTLS_P521_RainbowVClassic,
+	liboqs_sig.P521_Dilithium5: PQTLS_P521_Dilithium5, liboqs_sig.P521_Falcon1024: PQTLS_P521_Falcon1024, liboqs_sig.P521_SphincsShake256sSimple: PQTLS_P521_Sphincshake256ssimple,
 	
 	liboqs_sig.Dilithium2: PQTLS_Dilithium2, liboqs_sig.Falcon512: PQTLS_Falcon512,
 	liboqs_sig.Dilithium3: PQTLS_Dilithium3,
 	liboqs_sig.Dilithium5: PQTLS_Dilithium5, liboqs_sig.Falcon1024: PQTLS_Falcon1024, 
-
-	liboqs_sig.Sphincshake128ssimple: PQTLS_sphincsshake128ssimple, liboqs_sig.Sphincshake256ssimple: PQTLS_sphincsshake256ssimple,
+	liboqs_sig.SphincsShake128sSimple: PQTLS_sphincsshake128ssimple,
+	liboqs_sig.SphincsShake256sSimple: PQTLS_sphincsshake256ssimple,
 }
 
 func isLiboqsSigSignature(scheme SignatureScheme) SignatureScheme {
@@ -732,11 +732,11 @@ func isLiboqsSigSignature(scheme SignatureScheme) SignatureScheme {
 
 func classicFromHybridSig(scheme SignatureScheme) SignatureScheme {
 	switch true {
-	case scheme >= PQTLS_P256_Dilithium2 && scheme <= PQTLS_P256_RainbowIClassic:
+	case scheme >= PQTLS_P256_Dilithium2 && scheme <= PQTLS_P256_Sphincshake128ssimple:
 		return ECDSAWithP256AndSHA256
 	case scheme >= PQTLS_P384_Dilithium3 && scheme <= PQTLS_P384_RainbowIIIClassic:
 		return ECDSAWithP384AndSHA384
-	case scheme >= PQTLS_P521_Dilithium5 && scheme <= PQTLS_P521_RainbowVClassic:
+	case scheme >= PQTLS_P521_Dilithium5 && scheme <= PQTLS_P521_Sphincshake256ssimple:
 		return ECDSAWithP521AndSHA512
 	default:
 		return 0

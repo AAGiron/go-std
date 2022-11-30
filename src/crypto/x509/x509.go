@@ -235,19 +235,19 @@ const (
 	PureEdDilithium4
 	P256Dilithium2
 	P256Falcon512
-	P256RainbowIClassic
+	P256SphincsShake128sSimple
 	P384Dilithium3
 	P384RainbowIIIClassic
 	P521Dilithium5
 	P521Falcon1024
-	P521RainbowVClassic
+	P521SphincsShake256sSimple
 	Dilithium2
 	Falcon512
-	Sphincshake128ssimple
+	SphincsShake128sSimple
 	Dilithium3
 	Dilithium5
 	Falcon1024
-	Sphincshake256ssimple
+	SphincsShake256sSimple
 )
 
 func (algo SignatureAlgorithm) isRSAPSS() bool {
@@ -387,12 +387,12 @@ var (
 
 	oidSignatureP256Dilithium2 = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 12}
 	oidSignatureP256Falcon512 = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 13}
-	oidSignatureP256RainbowIClassic = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 14}
+	oidSignatureP256Sphincshake128ssimple = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 14}
 	oidSignatureP384Dilithium3 = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 15}
 	oidSignatureP384RainbowIIIClassic = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 16}
 	oidSignatureP521Dilithium5 = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 17}
 	oidSignatureP521Falcon1024 = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 18}
-	oidSignatureP521RainbowVClassic = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 19}
+	oidSignatureP521Sphincshake256ssimple = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 19}
 
 	oidSignatureDilithium2 = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 20}
 	oidSignatureFalcon512 = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 44363, 45, 21}	
@@ -404,15 +404,15 @@ var (
 )
 
 var oidSignatureFromSigID = map[liboqs_sig.ID]asn1.ObjectIdentifier {
-	liboqs_sig.P256_Dilithium2: oidSignatureP256Dilithium2, liboqs_sig.P256_Falcon512: oidSignatureP256Falcon512, liboqs_sig.P256_RainbowIClassic: oidSignatureP256RainbowIClassic, 
+	liboqs_sig.P256_Dilithium2: oidSignatureP256Dilithium2, liboqs_sig.P256_Falcon512: oidSignatureP256Falcon512, liboqs_sig.P256_SphincsShake128sSimple: oidSignatureP256Sphincshake128ssimple, 
 	liboqs_sig.P384_Dilithium3: oidSignatureP384Dilithium3, liboqs_sig.P384_RainbowIIIClassic: oidSignatureP384RainbowIIIClassic, 
-	liboqs_sig.P521_Dilithium5: oidSignatureP521Dilithium5, liboqs_sig.P521_Falcon1024: oidSignatureP521Falcon1024, liboqs_sig.P521_RainbowVClassic: oidSignatureP521RainbowVClassic,
+	liboqs_sig.P521_Dilithium5: oidSignatureP521Dilithium5, liboqs_sig.P521_Falcon1024: oidSignatureP521Falcon1024, liboqs_sig.P521_SphincsShake256sSimple: oidSignatureP521Sphincshake256ssimple,
 
 	liboqs_sig.Dilithium2: oidSignatureDilithium2, liboqs_sig.Falcon512: oidSignatureFalcon512,
 	liboqs_sig.Dilithium3: oidSignatureDilithium3,
 	liboqs_sig.Dilithium5: oidSignatureDilithium5, liboqs_sig.Falcon1024: oidSignatureFalcon1024,
-	liboqs_sig.Sphincshake128ssimple: oidSignatureSphincsshake128ssimple, 
-	liboqs_sig.Sphincshake256ssimple: oidSignatureSphincsshake256ssimple, 
+	liboqs_sig.SphincsShake128sSimple: oidSignatureSphincsshake128ssimple, 
+	liboqs_sig.SphincsShake256sSimple: oidSignatureSphincsshake256ssimple, 
 }
 
 var signatureAlgorithmDetails = []struct {
@@ -441,18 +441,18 @@ var signatureAlgorithmDetails = []struct {
 	{PureEd25519, "Ed25519", oidSignatureEd25519, Ed25519, crypto.Hash(0) /* no pre-hashing */},
 	{P256Dilithium2, "P256Dilithium2", oidSignatureP256Dilithium2, PQTLS, crypto.SHA256},
 	{P256Falcon512, "P256Falcon512", oidSignatureP256Falcon512, PQTLS, crypto.SHA256},
-	{P256RainbowIClassic, "P256RainbowIClassic", oidSignatureP256RainbowIClassic, PQTLS, crypto.SHA256},
+	{P256SphincsShake128sSimple, "P256Sphincsshake128ssimple", oidSignatureP256Sphincshake128ssimple, PQTLS, crypto.SHA256},
 	{P384Dilithium3, "P384Dilithium3", oidSignatureP384Dilithium3, PQTLS, crypto.SHA384},
 	{P384RainbowIIIClassic, "P384RainbowIIIClassic", oidSignatureP384RainbowIIIClassic, PQTLS, crypto.SHA384},
 	{P521Dilithium5, "P521Dilithium5", oidSignatureP521Dilithium5, PQTLS, crypto.SHA512},
 	{P521Falcon1024, "P521Falcon1024", oidSignatureP521Falcon1024, PQTLS, crypto.SHA512},
-	{P521RainbowVClassic, "P521RainbowVClassic", oidSignatureP521RainbowVClassic, PQTLS, crypto.SHA512},
+	{P521SphincsShake256sSimple, "P521Sphincsshake256ssimple", oidSignatureP521Sphincshake256ssimple, PQTLS, crypto.SHA512},
 	{Dilithium2, "Dilithium2", oidSignatureDilithium2, PQTLS, crypto.Hash(0)},
 	{Falcon512,  "Falcon512",  oidSignatureFalcon512,   PQTLS, crypto.Hash(0)},
-	{Sphincshake128ssimple, "Sphincsshake128ssimple", oidSignatureSphincsshake128ssimple, PQTLS, crypto.Hash(0)},
-	{Sphincshake256ssimple, "Sphincsshake256ssimple", oidSignatureSphincsshake256ssimple, PQTLS, crypto.Hash(0)},
-	{Dilithium3, "Dilithium3", oidSignatureDilithium2, PQTLS, crypto.Hash(0)},
-	{Dilithium5, "Dilithium5", oidSignatureDilithium3, PQTLS, crypto.Hash(0)},
+	{SphincsShake128sSimple, "Sphincsshake128ssimple", oidSignatureSphincsshake128ssimple, PQTLS, crypto.Hash(0)},
+	{SphincsShake256sSimple, "Sphincsshake256ssimple", oidSignatureSphincsshake256ssimple, PQTLS, crypto.Hash(0)},
+	{Dilithium3, "Dilithium3", oidSignatureDilithium3, PQTLS, crypto.Hash(0)},
+	{Dilithium5, "Dilithium5", oidSignatureDilithium5, PQTLS, crypto.Hash(0)},
 	{Falcon1024, "Falcon2014", oidSignatureFalcon1024, PQTLS, crypto.Hash(0)},
 
 }
