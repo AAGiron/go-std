@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"internal/cpu"
 	"io"
+	"io/ioutil"
 	"net"
 	"os"
 	"runtime"
@@ -2132,29 +2133,81 @@ func certPSKWriteToFile(peerIP string, pskLabelBytes, pskBytes []byte, wrapAlgor
 
 	fileName := pskDBPath
 
-	csvFile, err := os.OpenFile(fileName, os.O_APPEND|os.O_RDWR, os.ModeAppend)
+	csvFile, err := os.OpenFile(fileName, os.O_APPEND|os.O_RDWR|os.O_CREATE, 0664)	
 	if err != nil {
 		return err
-	}
+	}	
 
-	defer csvFile.Close()
-
-	csvwriter := csv.NewWriter(csvFile)
-
-	var rec []string
+	defer csvFile.Close()	
 
 	if isClient {
-		rec = []string{peerIP, pskLabel, psk, wrapAlgorithm} 
-	} else {
-		rec = []string{pskLabel, psk, wrapAlgorithm}
-	}
-
-	if err := csvwriter.Write(rec); err != nil {
-		return err
-	}
+		// Here we are creating a temporary file to copy all the 'fileName' Cert PSK records, except the one
+		// that corresponds to the 'peerIP'. After copying, we are appending a new Cert PSK record corresponding
+		// to 'peerIP'. Then we will copy all the content of this temporary file to the original file, 'fileName'.
+		// In this way, we won't have more than one Cert PSK established with one server.
 		
-	csvwriter.Flush()	
+		csvFileUpdated, err := os.OpenFile(fileName + ".temp", os.O_APPEND|os.O_RDWR|os.O_CREATE, 0664)
+		if err != nil {
+			panic(err)
+		}
+		defer csvFileUpdated.Close()
 
+		csvReader := csv.NewReader(csvFile)
+		csvUpdatedWriter := csv.NewWriter(csvFileUpdated)
+
+		for {
+			rec, err := csvReader.Read()
+			
+			if err == io.EOF {
+					break
+			}
+			
+			if err != nil {
+				panic(err)
+			}
+			
+			if rec[0] != peerIP {
+				if err := csvUpdatedWriter.Write(rec); err != nil {
+					panic(err)
+				}
+			}
+		}
+
+		rec := []string{peerIP, pskLabel, psk, wrapAlgorithm} 
+
+		if err := csvUpdatedWriter.Write(rec); err != nil {
+			panic(err)
+		}
+			
+		csvUpdatedWriter.Flush()
+
+		/* ------------- Copying temporary file content to original file ------------ */
+		
+		csvFile.Close()
+		csvFileUpdated.Close()		
+
+		input, err := ioutil.ReadFile(fileName + ".temp")
+		if err != nil {
+			panic(err)
+		}
+
+		err = ioutil.WriteFile(fileName, input, 0664)
+		if err != nil {
+			panic(err)			
+		}
+
+		os.Remove(fileName + ".temp")	
+		
+	} else {
+		csvwriter := csv.NewWriter(csvFile)	
+		rec := []string{pskLabel, psk, wrapAlgorithm}
+		
+		if err := csvwriter.Write(rec); err != nil {
+			return err
+		}
+			
+		csvwriter.Flush()	
+	}	
 	return nil
 }
 
