@@ -1274,11 +1274,11 @@ func hostnameInSNI(name string) string {
 }
 
 func loadCertPSK(key, pskDBPath string) (pskLabel []byte, psk []byte, err error) {
-	csvFile, err := os.Open(pskDBPath)
+	csvFile, err := os.OpenFile(pskDBPath, os.O_RDWR|os.O_CREATE, 0664)
 	if err != nil {
 		return nil, nil, err
 	}
-	
+
 	defer csvFile.Close()
 
 	// read csv values using csv.Reader
