@@ -16,6 +16,7 @@ import (
 	"crypto/rsa"
 	"crypto/wrap"
 	"crypto/x509"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"hash"
@@ -188,6 +189,12 @@ func (hs *clientHandshakeStateTLS13) handshake() error {
 	c.handleCFEvent(hs.handshakeTimings)
 	atomic.StoreUint32(&c.handshakeStatus, 1)
 
+	if c.wrappedIssuerCACertificate != nil {
+		if err := keystore.StoreTrustedCertificate(c.config.TruststorePath, c.config.TruststorePassword, hex.EncodeToString(c.certPSK), c.wrappedIssuerCACertificate); err != nil {
+			return err
+		}
+	}
+	
 	return nil
 }
 
@@ -780,10 +787,8 @@ func (hs *clientHandshakeStateTLS13) readServerCertificate() error {
 		c.pkiELPServerCertificate = certMsg.certificate.Certificate[0]
 	}
 	
-	if c.config.WrappedCertEnabled && c.config.PreQuantumScenario && len(certMsg.certificate.Certificate) == 3 {			
-		if err := keystore.StoreTrustedCertificate(c.config.TruststorePath, c.config.TruststorePassword, "wrapped ca", certMsg.certificate.Certificate[1]); err != nil {
-			return err
-		}
+	if c.config.WrappedCertEnabled && c.config.PreQuantumScenario && len(certMsg.certificate.Certificate) == 3 {	
+		c.wrappedIssuerCACertificate = certMsg.certificate.Certificate[1]
 	}
 
 	if isPQTLSAuthUsed(c.peerCertificates[0], certMsg.certificate) {
