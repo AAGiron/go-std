@@ -13,6 +13,7 @@ import (
 	"crypto/liboqs_sig"
 	"crypto/rsa"
 	"crypto/subtle"
+	"crypto/keystore"
 	"crypto/wrap"
 	"crypto/x509"
 	"encoding/csv"
@@ -349,6 +350,26 @@ func (c *Conn) clientHandshake() (err error) {
 				wrapAlgorithm: c.config.WrapAlgorithm,
 			}
 		} else {			
+			// If we are in the post-quantum scenario of the PKIELP, we need to set the wrapped issuer CA as the root CA
+			if !c.config.PreQuantumScenario {
+				ks, err := keystore.ReadKeyStore(c.config.TruststorePath, []byte(c.config.TruststorePassword))
+				if err != nil {
+					panic(err)
+				}
+					
+				trustedCertEntry, err := ks.GetTrustedCertificateEntry(hex.EncodeToString(certPSK))
+				if err != nil {
+					panic(err)
+				}
+			
+				trustedWrappedCA, err := x509.ParseCertificate(trustedCertEntry.Certificate.Content)
+				if err != nil {
+					panic(err)
+				}
+				
+				c.config.RootCAs.AddCert(trustedWrappedCA)
+			}
+
 			fmt.Printf("Client does have an agreed Cert PSK with this server:\n\n")  // HS Prints
 			certPSKExt = certPSKExtension{
 				establishPSK: false,

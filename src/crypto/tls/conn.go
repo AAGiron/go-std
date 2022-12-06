@@ -168,6 +168,11 @@ type Conn struct {
 
 	// Certificate sent by the server in the PKIELP proposal. This field is only set in the server side.
 	pkiELPServerCertificate []byte
+
+	// Wrapped Issuer CA certificate sent in the certificate chain. This certificate is received during
+	// the handshake and temporarily stored here, until the handshake is completed. When the handshake is
+	// completed, this certificate will be stored in the client Truststore.	
+	wrappedIssuerCACertificate []byte
 }
 
 // Access to net.Conn methods.

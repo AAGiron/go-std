@@ -1,15 +1,21 @@
 package keystore
 
 import (
+	"errors"
 	"os"
 	"time"
+
 	keystore "github.com/pavlo-v-chernykh/keystore-go/v4"
 )
 
-func StoreTrustedCertificate(keystoreFilePath, keystorePassword, alias string, certificate []byte) error {	
+var FailedToOpen error = errors.New("failed to open keystore file")
 
-	// Creating Keystore
-	ks := keystore.New()	
+func StoreTrustedCertificate(keystoreFilePath, keystorePassword, alias string, certificate []byte) error {	
+	var ks keystore.KeyStore
+	ks, err := ReadKeyStore(keystoreFilePath, []byte(keystorePassword))
+	if errors.Is(err, FailedToOpen) {
+		ks = keystore.New()	
+	}
 
 	trustedCertEntry := keystore.TrustedCertificateEntry{
 		CreationTime: time.Now(),
@@ -48,7 +54,7 @@ func writeKeyStore(ks keystore.KeyStore, filename string, password []byte) error
 func ReadKeyStore(filename string, password []byte) (keystore.KeyStore, error) {
 	f, err := os.Open(filename)
 	if err != nil {
-		return keystore.KeyStore{}, err
+		return keystore.KeyStore{}, FailedToOpen
 	}
 
 	defer func() {
