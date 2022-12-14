@@ -1604,9 +1604,8 @@ func (hs *serverHandshakeStateTLS13) readClientFinished() error {
 
 
 func (hs *serverHandshakeStateTLS13) loadAllWrappedCerts(preQuantumScenario bool) error {
-	
 	wrappedCertsDir := hs.c.config.WrappedCertsDir
-	serverDomain := "teste"
+	serverDomain := hs.c.config.ServerName
 
 	file, err := os.Open(wrappedCertsDir)
 	if err != nil {

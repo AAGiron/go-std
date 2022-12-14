@@ -769,6 +769,10 @@ func (hs *clientHandshakeStateTLS13) readServerCertificate() error {
 
 	fmt.Printf("Verifying server certificate...\n\n")
 
+	/* ----------------------------------- ... ---------------------------------- */
+
+	// Code snippet to print the certificate chain received from the server. Useful to debug certificate chain verification problems.
+
 	// serverCertificates := make([]*x509.Certificate, len(certMsg.certificate.Certificate))	
 	// for i := 0; i < len(certMsg.certificate.Certificate); i++ {
 	// 	cert, err := x509.ParseCertificate(certMsg.certificate.Certificate[i])
@@ -778,6 +782,22 @@ func (hs *clientHandshakeStateTLS13) readServerCertificate() error {
 	// 	serverCertificates[i] = cert
 	// 	fmt.Printf("Subject: %s   ---  Issued by: %s\n", serverCertificates[i].Subject.CommonName, serverCertificates[i].Issuer.CommonName)
 	// }
+	
+	// fmt.Println("RootCA's")
+	// if c.config.RootCAs != nil {
+	// 	rootCert, err := c.config.RootCAs.Cert(0)
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
+		
+	// 	fmt.Printf("Subject: %s   ---  Issued by: %s\n", rootCert.Subject.CommonName, rootCert.Issuer.CommonName)
+	// } else {
+	// 	fmt.Println("is NIL")
+	// }
+	
+	// fmt.Println("End")	
+	
+	/* ----------------------------------- ... ---------------------------------- */
 
 	if err := c.verifyServerCertificate(certMsg.certificate.Certificate); err != nil {
 		return err
