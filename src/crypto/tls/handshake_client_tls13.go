@@ -685,6 +685,8 @@ func isPQTLSAuthUsed(peerCertificate *x509.Certificate, cert Certificate) bool {
 	return false
 }
 
+// readServerCertificate
+// PKIELPModification: it was added support for unwrapping of wrapped certificate's public keys prior to verifying the handshake signature with it.
 func (hs *clientHandshakeStateTLS13) readServerCertificate() error {
 	c := hs.c
 	var certMsg *certificateMsgTLS13
@@ -766,8 +768,6 @@ func (hs *clientHandshakeStateTLS13) readServerCertificate() error {
 
 	c.scts = certMsg.certificate.SignedCertificateTimestamps
 	c.ocspResponse = certMsg.certificate.OCSPStaple
-
-	fmt.Printf("Verifying server certificate...\n\n")
 
 	/* ----------------------------------- ... ---------------------------------- */
 
@@ -1143,6 +1143,8 @@ func (hs *clientHandshakeStateTLS13) sendClientCertificate() error {
 	return nil
 }
 
+// sendClientFinished
+// PKIELP Modification: an additional step was added to derive the Handshake Master Secret into the Cert PSK Master Secret.
 func (hs *clientHandshakeStateTLS13) sendClientFinished() error {
 	c := hs.c
 
@@ -1235,6 +1237,10 @@ func (c *Conn) handleNewSessionTicket(msg *newSessionTicketMsgTLS13) error {
 	return nil
 }
 
+// handleNewCertPSK process a NewCertPSK TLS handshake message received from the server.
+// The `nonce` field of the message will be used in the Cert PSK derivation, the `wrapAlgorithm` field
+// will be used to determine the length of the Cert PSK, and the `label` field will be used during the storage
+// of the generated Cert PSK as an identifier of it.
 func (c *Conn) handleNewCertPSK(msg *newCertPSKMsgTLS13) error {
 	fmt.Printf("Client is handling a NewCertPSK message:\n  Nonce: %x\n  Label: %x\n\n", msg.nonce[:10], msg.label[:10])
 	

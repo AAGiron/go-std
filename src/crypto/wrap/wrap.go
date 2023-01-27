@@ -1,3 +1,6 @@
+
+// Package wrap implements functions and structs to wrap/unwrap public keys according to PKIELP proposal
+// and implements in interface to Ascon-80pq encrypt and decrypt operations.
 package wrap
 
 import (
@@ -12,12 +15,22 @@ import (
 	"golang.org/x/crypto/cryptobyte"
 )
 
+// PublicKey contains the wrapped public key and information related to it.
 type PublicKey struct {
+
+	// ClassicAlgorithm is the ECDSA curve of the public key, before being wrapped.
 	ClassicAlgorithm  elliptic.Curve
+
+	// WrapAlgorithm is the name of the symmetric encryption algorithm used to encrypt/wrap the public key.
 	WrapAlgorithm string
+
+	// WrappedPk is the wrapped public key bytes.
 	WrappedPk []byte
 }
 
+// GetNameString returns the wrapped algorithm name, which is composed by the
+// symmetric encryption algorithm name plus the original public key's algorithm name (a classic algorithm).
+// Example: AES256_ECDSA-P256.
 func (pub *PublicKey) GetNameString() string {
 	var classicEC string
 	
@@ -35,6 +48,8 @@ func (pub *PublicKey) GetNameString() string {
 	return pub.WrapAlgorithm + "_ECDSA-" + classicEC
 }
 
+// WrapPublicKey encrypts `plaintext` which is expected to be a public key with `key` using `wrapAlgorithm`,
+// returning a wrapped public key.
 func WrapPublicKey(plaintext, key []byte, wrapAlgorithm string) (ciphertext []byte, err error) {
 	var ciphertextPk []byte	
 	var nonce []byte
@@ -84,6 +99,8 @@ func WrapPublicKey(plaintext, key []byte, wrapAlgorithm string) (ciphertext []by
 	return b.BytesOrPanic(), nil
 }
 
+// UnwrapPublicKey unwraps a wrapped public key, i.e. it decrypts `ciphertext` (which is expected to be a
+// wrapped public key) using `key` and wrapAlgorithm.
 func UnwrapPublicKey(ciphertext, key []byte, wrapAlgorithm string) (plaintext []byte, err error) {
 
 	var wrappedPk, nonce []byte

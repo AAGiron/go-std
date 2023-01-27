@@ -74,7 +74,7 @@ type Conn struct {
 	resumptionSecret []byte
 
 	// certPSKMasterSecret is the cert_psk_master_secret, used to 
-	// derive the Wrapped Certificate PSK. If config.WrappedCertEnabled
+	// derive the Cert PSK. If config.WrappedCertEnabled
 	// is false, then certPSKMasterSecret will be nil
 	certPSKMasterSecret []byte
 
@@ -164,14 +164,15 @@ type Conn struct {
 	clientHandshakeSizes TLS13ClientHandshakeSizes
 	serverHandshakeSizes TLS13ServerHandshakeSizes
 
+	// certPSK is the Cert PSK of the PKIELP proposal.
 	certPSK []byte
 
-	// Certificate sent by the server in the PKIELP proposal. This field is only set in the server side.
+	// pkiELPServerCertificate is the certificate sent by the server in the PKIELP proposal. This field is only set in the server side.
 	pkiELPServerCertificate []byte
 
-	// Wrapped Issuer CA certificate sent in the certificate chain. This certificate is received during
+	// wrappedIssuerCACertificate is the wrapped issuer CA certificate sent in the certificate chain. This certificate is received during
 	// the handshake and temporarily stored here, until the handshake is completed. When the handshake is
-	// completed, this certificate will be stored in the client Truststore.	
+	// completed, this certificate will be stored in the client's truststore.	
 	wrappedIssuerCACertificate []byte
 }
 

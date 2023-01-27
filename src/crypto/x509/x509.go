@@ -895,8 +895,8 @@ func (c *Certificate) hasSANExtension() bool {
 	return oidInExtensions(oidExtensionSubjectAltName, c.Extensions)
 }
 
-// CheckSignatureFromWrapped verifies that the signature on c is a valid signature
-// from a wrapped parent.
+// CheckSignatureFromWrapped verifies that the signature on `c` is a valid signature
+// from a wrapped `parent`, which is wrapped under `certPSK`.
 func (c *Certificate) CheckSignatureFromWrapped(parent *Certificate, certPSK []byte) error {
 
 	fmt.Printf("Checking signature from wrapped parent certificate...\nParent:\n  Subject: %s\n  Subject Key ID: %x\n\nCertificate signed by parent:\n  Subject: %s\n  Subject Key ID: %x\n\n", 
@@ -1951,7 +1951,9 @@ var (
 	oidExtensionAuthorityInfoAccess   = []int{1, 3, 6, 1, 5, 5, 7, 1, 1}
 	oidExtensionCRLNumber             = []int{2, 5, 29, 20}
 	oidExtensionDelegatedCredential   = []int{1, 3, 6, 1, 4, 1, 44363, 44}
-	oidExtensionCertPSK               = []int{1, 3, 6, 1, 4, 1, 44363, 45}  // CSR Extension to transmit the Cert PSK in the context of wrapped CSR's
+
+	// oidExtensionCertPSK is the oid of the CSR's Cert PSK extension, which holds the Cert PSK of the wrapped CSR.
+	oidExtensionCertPSK               = []int{1, 3, 6, 1, 4, 1, 44363, 45}
 )
 
 var (
@@ -3038,7 +3040,8 @@ func CreateCertificateRequest(rand io.Reader, template *CertificateRequest, priv
 }
 
 // CreateWrappedCertificateRequest creates a new wrapped certificate request based on a
-// template. The following members of template are used:
+// template. The wrapped CSR will be wrapped with `certPSK` using `wrapAlgorithm`.
+// The following members of template are used:
 //
 //  - SignatureAlgorithm
 //  - Subject
@@ -3237,6 +3240,7 @@ func CreateWrappedCertificateRequest(rand io.Reader, template *CertificateReques
 	})
 }
 
+// GetCertPSK returns the Cert PSK from the wrapped csr `csr`.
 func GetCertPSK(csr *CertificateRequest) ([]byte) {
 	var certPSK []byte
 
@@ -3251,6 +3255,8 @@ func GetCertPSK(csr *CertificateRequest) ([]byte) {
 
 }
 
+// VerifyWrappedCSRSignature verifies the signature of a wrapped CSR by unwrapping
+// the wrapped public key and verifying the signature with it.
 func VerifyWrappedCSRSignature(csr *CertificateRequest) (bool, error) {	
 	wrappedPub, ok := csr.PublicKey.(*wrap.PublicKey)
 	
@@ -3494,22 +3500,25 @@ func CreateRevocationList(rand io.Reader, template *RevocationList, issuer *Cert
 }
 
 
-// RFC 9162 4.6	
+// CTExtension is a Log Artifact extension from the Certificate Transparency version 2.0 (RFC 9162)
+// This extension is described in the section 4.6 and it is going to be used for SCTs.
 type CTExtension struct {
 	ExtensionType int
 	ExtensionData []byte
 }
 
-// VersionedTransType
+// VersionedTransType for X.509 SCT v2.
 const (
 	x509_sct_v2 int = 0x0102
 )
 
+// TransItem is the TransItem structure from the RFC 9162 section 4.5.
 type TransItem struct {
 	VersionedTransType int
 	Data SignedCertificateTimestampDataV2
 }
 
+// SignedCertificateTimestampDataV2, from the RFC 9162 section 4.8.
 type SignedCertificateTimestampDataV2 struct {
 	LogID asn1.ObjectIdentifier
 	Timestamp int
@@ -3517,7 +3526,7 @@ type SignedCertificateTimestampDataV2 struct {
 	Signature []byte
 }
 
-
+// CreateSCT creates a two dummy SCTs for the `template` and signed by `parent`, returning an extension containing both of them.
 func CreateSCT(rand io.Reader, template, parent *Certificate, pub, priv interface{}) (pkix.Extension, error) {
 
 	var dummyExt pkix.Extension
@@ -3557,6 +3566,7 @@ func CreateSCT(rand io.Reader, template, parent *Certificate, pub, priv interfac
 	return marshalSCT(tiList)
 }
 
+// sctSignTBSCertificate signs a TBSCertificate created from `template` using priv.
 func sctSignTBSCertificate(rand io.Reader, template, parent *Certificate, pub, priv interface{}) ([]byte, error) {
 
 	intCAPriv := priv.(crypto.Signer)

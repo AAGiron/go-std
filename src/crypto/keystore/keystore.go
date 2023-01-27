@@ -1,3 +1,5 @@
+
+// Package keystore implements keystore/truststore operations.
 package keystore
 
 import (
@@ -10,6 +12,8 @@ import (
 
 var FailedToOpen error = errors.New("failed to open keystore file")
 
+// StoreTrustedCertificate stores `certificate` in the truststore pointed by `keystoreFilePath`. Certificates
+// stored in a truststore are trusted by the client, thus they are used to validate certificate chains.
 func StoreTrustedCertificate(keystoreFilePath, keystorePassword, alias string, certificate []byte) error {	
 	var ks keystore.KeyStore
 	ks, err := ReadKeyStore(keystoreFilePath, []byte(keystorePassword))
@@ -30,6 +34,7 @@ func StoreTrustedCertificate(keystoreFilePath, keystorePassword, alias string, c
 	return writeKeyStore(ks, keystoreFilePath, []byte(keystorePassword))
 }
 
+// writeKeyStore writes `ks` to the password-protected file `filename`.
 func writeKeyStore(ks keystore.KeyStore, filename string, password []byte) error {
 	f, err := os.Create(filename)
 	if err != nil {
@@ -51,6 +56,7 @@ func writeKeyStore(ks keystore.KeyStore, filename string, password []byte) error
 	return nil
 }
 
+// ReadKeyStore loads the keystore in `filename` with `password` and return it's content in a keystore.Keystore struct.
 func ReadKeyStore(filename string, password []byte) (keystore.KeyStore, error) {
 	f, err := os.Open(filename)
 	if err != nil {

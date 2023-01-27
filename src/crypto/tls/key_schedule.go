@@ -31,6 +31,9 @@ const (
 	exporterLabel                            = "exp master"
 	resumptionLabel                          = "res master"
 	trafficUpdateLabel                       = "traffic upd"
+
+	// wrappedCertLabel is the label that will be used in the derivation of the
+	// Cert PSK Master Secret.
 	wrappedCertLabel                         = "wrap master"
 )
 

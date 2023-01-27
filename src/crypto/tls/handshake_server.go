@@ -42,6 +42,11 @@ type serverHandshakeState struct {
 }
 
 // serverHandshake performs a TLS handshake as a server.
+// PKIELP modification: the server now loads all wrapped certificates in memory. This was made
+// in order to avoid reading a wrapped certificate in the filesystem during the handshake, which would
+// greatly impact our time measurements. Since the server will only know the correct wrapped certificate
+// to use for the handshake upon reception of the ClientHello message, we have to load every wrapped 
+// certificate to memory.
 func (c *Conn) serverHandshake() error {
 	clientHello, err := c.readClientHello()
 	if err != nil {

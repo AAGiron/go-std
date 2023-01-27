@@ -328,6 +328,9 @@ func (c *Conn) makeClientHello(minVersion uint16) (*clientHelloMsg, []clientKeyS
 	return hello, keySharePrivates, sharedSecret, nil
 }
 
+// clientHandshake initializes the TLS handshake in the client side.
+// PKIELP Modification: in the beginning of this function, the client will load the Cert PSK (from his Cert PSK database), that
+// he established with the current server, and construct the Cert PSK extension.
 func (c *Conn) clientHandshake() (err error) {
 	if c.config == nil {
 		c.config = defaultConfig()
@@ -434,9 +437,6 @@ func (c *Conn) clientHandshake() (err error) {
 			}
 		}()
 	}
-	
-	// fmt.Printf("Hello.OCSP: ")
-	// fmt.Println(hello.ocspStapling)
 
 	if _, err := c.writeRecord(recordTypeHandshake, hello.marshal()); err != nil {
 		return err
@@ -487,7 +487,7 @@ func (c *Conn) clientHandshake() (err error) {
 			binderKey:        binderKey,
 			handshakeTimings: handshakeTimings,
 			ssKEMTLS:         ssKEMTLS,
-			pdkKEMTLS:        hello.pdkKEMTLS,			
+			pdkKEMTLS:        hello.pdkKEMTLS,
 		}
 
 		// In TLS 1.3, session tickets are delivered after the handshake.
@@ -1294,6 +1294,7 @@ func hostnameInSNI(name string) string {
 	return name
 }
 
+// loadCertPSK will load Cert PSK data from the record identified by `key` in the database located at `pskDBPath`. 
 func loadCertPSK(key, pskDBPath string) (pskLabel []byte, psk []byte, err error) {
 	csvFile, err := os.OpenFile(pskDBPath, os.O_RDWR|os.O_CREATE, 0664)
 	if err != nil {

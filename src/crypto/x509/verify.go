@@ -223,6 +223,9 @@ type VerifyOptions struct {
 	// validating. It does not apply to the platform verifier.
 	MaxConstraintComparisions int
 
+	// CertPSK is the Cert PSK, which is necessary to validate certificate chains
+	// containing wrapped certificates, since to verify a signature made by a wrapped
+	// certificate we need to unwrap it public key.
 	CertPSK []byte
 }
 

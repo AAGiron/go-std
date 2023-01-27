@@ -118,6 +118,8 @@ const (
 	extensionECHIsInner              uint16 = 0xda09 // draft-ietf-tls-esni-10
 	extensionECHOuterExtensions      uint16 = 0xfd00 // draft-ietf-tls-esni-10
 	extensionPDKKEMTLS               uint16 = 0xfd01 // arbitraly chosen
+
+	// extensionCertPSK is the number of the ClientHello's extension Cert PSK
 	extensionCertPSK                 uint16 = 0xfd02 // arbitraly chosen
 )
 
@@ -330,6 +332,8 @@ var supportedSignatureAlgorithmsDC = []SignatureScheme{
 	KEMTLSWithNTRU_HPS_2048_509, KEMTLSWithNTRU_HPS_2048_677, KEMTLSWithNTRU_HPS_4096_821, KEMTLSWithNTRU_HPS_4096_1229, KEMTLSWithNTRU_HRSS_701, KEMTLSWithNTRU_HRSS_1373,	
 }
 
+// supportedWrapAlgorithms is a list of symmetric encryption algorithms names which are supported
+// in wrapped certificates.
 var supportedWrapAlgorithms = []string {
 	"AES256","Ascon80pq",
 }
@@ -498,7 +502,7 @@ type ConnectionState struct {
 	ClientHandshakeSizes TLS13ClientHandshakeSizes
 	ServerHandshakeSizes TLS13ServerHandshakeSizes
 
-	// Certificate sent by the server in the PKIELP proposal. This field is only set in the server side.
+	// PKIELPServerCertificate is the certificate sent by the server in the PKIELP proposal. This field is only set in the server side.
 	PKIELPServerCertificate []byte
 }
 
@@ -1093,13 +1097,12 @@ type Config struct {
 	// connection.
 	ECHEnabled bool
 
-	// WrappedCertEnabled determines whether the Wrapped Cert implementation is enabled for this
-	// connection.
+	// WrappedCertEnabled determines whether the PKIELP proposal (also referred as wrapped certificates) is enabled.
 	WrappedCertEnabled bool
-
+		
 	IgnoreSigAlg bool
 
-	// WrappedCertsDir is the directory where the Wrapped Certificates are stored
+	// WrappedCertsDir is the path to the directory where the wrapped certificates are stored.
 	WrappedCertsDir string
 
 	// ClientECHConfigs are the parameters used by the client when it offers the
@@ -1165,23 +1168,24 @@ type Config struct {
 	// auto-rotation logic. See Config.ticketKeys.
 	autoSessionTicketKeys []ticketKey
 
+	// PSKDBPath is the path to the Cert PSK database file.
 	PSKDBPath string
 
-	// Path to the client's truststore, where it stores trusted certificates
+	// TruststorePath is the path to the client's truststore, where trusted certificates are stored.
 	TruststorePath string
 
-	// Password of the client's truststore, where it stores trusted certificates
+	// TruststorePassword is the password of the client's truststore.
 	TruststorePassword string
 
 	// PreQuantumScenario is true if we are simulating a TLS handshake in the pre-quantum scenario
-	// of the PKI Extended Lifetime Period proposal
+	// of the PKIELP proposal
 	PreQuantumScenario bool
 
 	// WrapAlgorithm is the wrap algorithm that the client is willing to use in the PKIELP proposal.
-	// WrapAlgorithm is used exclusively by the client, which will send it through his ClientHello.certPSK
+	// WrapAlgorithm is used exclusively by the client, which will send it through the Cert PSK extension of the ClientHello.
 	WrapAlgorithm string
 
-	// Path to the file where the OCSP Response made by the Pebble was written to. If this string is not empty,
+	// OCSPResponseFilePath is the path to the file where the OCSP Response made by the ACME server was written to. If this string is not empty,
 	// the file will be read and the OCSP Response from it will be sent through OCSP stapling in the handshake.
 	OCSPResponseFilePath string
 
@@ -2126,6 +2130,12 @@ func getMessageLength(msg []byte) (uint32, error) {
 	return msg_size, nil
 }
 
+// certPSKWriteToFile writes Cert PSKs and Cert PSK-related data to the TLS client's and TLS server's
+// Cert PSK database, which are CSV files.
+// TLS clients will store records in the following format: 
+//	Server IP, Cert PSK identity/label (hexstring), Cert PSK (hexstring), wrap algorithm
+// TLS servers will store records in the following format:
+//	Cert PSK identity/label (hexstring), Cert PSK (hexstring), wrap algorithm
 func certPSKWriteToFile(peerIP string, pskLabelBytes, pskBytes []byte, wrapAlgorithm string, isClient bool, pskDBPath string) error {
 
 	pskLabel := hex.EncodeToString(pskLabelBytes)
@@ -2211,8 +2221,17 @@ func certPSKWriteToFile(peerIP string, pskLabelBytes, pskBytes []byte, wrapAlgor
 	return nil
 }
 
+// certPSKExtension is the ClientHello's Cert PSK extension, sent by the client to negotiate and establish
+// parameters related to the PKIELP proposal.
 type certPSKExtension struct {
-	establishPSK bool  // The client will set it to true when it wants to establish a new PSK
+	// establishPSK is true if the client is willing to establish a Cert PSK in the handshake.
+	establishPSK bool
+
+	// identities are the Cert PSK identities/label of the Cert PSKs that the client has established with
+	// the server. The server will use this field to select the correct wrapped certificate to be used in the handshake.
 	identities [][]byte
+
+	// wrapAlgorithm is the wrap algorithm that the client wants the Cert PSK to be suitable for.
+	// This field is used only when `establishPSK` is true.
 	wrapAlgorithm string
 }

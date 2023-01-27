@@ -1269,10 +1269,20 @@ func (m *newSessionTicketMsgTLS13) unmarshal(data []byte) bool {
 	return true
 }
 
+// newCertPSKMsgTLS13 is the NewCertPSK handshake message, which was created for the PKIELP.
+// This message is sent by the TLS server, and it holds the data necessary for the client to
+// derive the same Cert PSK as the server.
 type newCertPSKMsgTLS13 struct {
+	// raw is the raw bytes of the newCertPSKMsgTLS13 struct marshalled.
 	raw          []byte
+
+	// nonce is the nonce used by the server to derive the Cert PSK.
 	nonce        []byte
+
+	// label is the Cert PSK's label/identity (created by the server) which uniquely identifies the Cert PSK.
 	label        []byte
+	
+	// wrapAlgorithm is the name of the wrap algorithm used to derive the Cert PSK.
 	wrapAlgorithm string	
 }
 

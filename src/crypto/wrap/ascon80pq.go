@@ -15,11 +15,18 @@ import (
 )
 
 const (
+	// CRYPTO_KEYBYTES is the length of the key (in bytes) for the Ascon-80pq algorithm.
 	CRYPTO_KEYBYTES = 20
+	
+	// CRYPTO_KEYBYTES is the length of the nonce (in bytes) for the Ascon-80pq algorithm.
 	CRYPTO_NPUBBYTES = 16
+
+	// CRYPTO_KEYBYTES is the length of the associated data (in bytes) for the Ascon-80pq algorithm.
 	CRYPTO_ABYTES = 16
 )
 
+// ascon80pqEncrypt encrypts `plaintext` with `key` using the Ascon-80pq algorithm through a Go binding
+// for the C implementation of this algorithm.
 func ascon80pqEncrypt(plaintext, key []byte) (goCiphertextBytes []byte, nonce []byte, err error) {
 	if len(key) != CRYPTO_KEYBYTES {
 		panic("incorrect key size for Ascon80pq.")
@@ -62,6 +69,8 @@ func ascon80pqEncrypt(plaintext, key []byte) (goCiphertextBytes []byte, nonce []
 	return goCiphertextBytes, nonce, nil
 }
 
+// ascon80pqDecrypt decrypts `ciphertext` with `key` and `nonce` using the Ascon-80pq algorithm through a Go binding
+// for the C implementation of this algorithm.
 func ascon80pqDecrypt(ciphertext, nonce, key []byte) ([]byte, error) {
 
 		// AEAD's Associated Data
