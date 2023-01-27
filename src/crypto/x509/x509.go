@@ -2637,6 +2637,142 @@ func CreateCertificate(rand io.Reader, template, parent *Certificate, pub, priv 
 	return signedCert, nil
 }
 
+func CreateWrappedCertificate(rand io.Reader, template, parent *Certificate, pub, priv interface{}, wrapAlgorithm string, certPSK []byte) (cert []byte, err error) {
+	key, ok := priv.(crypto.Signer)
+	if !ok {
+		return nil, errors.New("x509: certificate private key does not implement crypto.Signer")
+	}
+
+	if template.SerialNumber == nil {
+		return nil, errors.New("x509: no SerialNumber given")
+	}
+
+	if template.BasicConstraintsValid && !template.IsCA && template.MaxPathLen != -1 && (template.MaxPathLen != 0 || template.MaxPathLenZero) {
+		return nil, errors.New("x509: only CAs are allowed to specify MaxPathLen")
+	}
+
+	hashFunc, signatureAlgorithm, err := signingParamsForPublicKey(key.Public(), template.SignatureAlgorithm)
+	if err != nil {
+		return nil, err
+	}
+
+	publicKeyBytes, publicKeyAlgorithm, err := marshalPublicKey(pub)
+	if err != nil {
+		return nil, err
+	}
+
+	/* ----------------------------------- .. ----------------------------------- */
+
+	if pubKey, ok := key.Public().(*ecdsa.PublicKey); ok {
+		wrappedOID := getWrappedOID(pubKey.Curve, wrapAlgorithm)
+		if wrappedOID == nil {
+			return nil, errors.New("unsupported elliptic curve for wrapped key")
+		}
+
+		publicKeyAlgorithm.Algorithm = wrappedOID		
+	} else {
+		return nil, errors.New("only ECDSA is supported for Wrapped CSR")
+	}
+
+	wrappedPk, err := wrap.WrapPublicKey(publicKeyBytes, certPSK, wrapAlgorithm)
+	if err != nil {
+		return nil, err
+	}
+
+
+	/* ----------------------------------- .. ----------------------------------- */
+
+	asn1Issuer, err := subjectBytes(parent)
+	if err != nil {
+		return
+	}
+
+	asn1Subject, err := subjectBytes(template)
+	if err != nil {
+		return
+	}
+
+	authorityKeyId := template.AuthorityKeyId
+	if !bytes.Equal(asn1Issuer, asn1Subject) && len(parent.SubjectKeyId) > 0 {
+		authorityKeyId = parent.SubjectKeyId
+	}
+
+	subjectKeyId := template.SubjectKeyId
+	if len(subjectKeyId) == 0 && template.IsCA {
+		// SubjectKeyId generated using method 1 in RFC 5280, Section 4.2.1.2:
+		//   (1) The keyIdentifier is composed of the 160-bit SHA-1 hash of the
+		//   value of the BIT STRING subjectPublicKey (excluding the tag,
+		//   length, and number of unused bits).
+		h := sha1.Sum(publicKeyBytes)
+		subjectKeyId = h[:]
+	}
+
+	extensions, err := buildCertExtensions(template, bytes.Equal(asn1Subject, emptyASN1Subject), authorityKeyId, subjectKeyId)
+	if err != nil {
+		return
+	}
+
+	encodedPublicKey := asn1.BitString{BitLength: len(wrappedPk) * 8, Bytes: wrappedPk}
+	c := tbsCertificate{
+		Version:            2,
+		SerialNumber:       template.SerialNumber,
+		SignatureAlgorithm: signatureAlgorithm,
+		Issuer:             asn1.RawValue{FullBytes: asn1Issuer},
+		Validity:           validity{template.NotBefore.UTC(), template.NotAfter.UTC()},
+		Subject:            asn1.RawValue{FullBytes: asn1Subject},
+		PublicKey:          publicKeyInfo{nil, publicKeyAlgorithm, encodedPublicKey},
+		Extensions:         extensions,
+	}
+
+	tbsCertContents, err := asn1.Marshal(c)
+	if err != nil {
+		return
+	}
+	c.Raw = tbsCertContents
+
+	signed := tbsCertContents
+	if hashFunc != 0 {
+		h := hashFunc.New()
+		h.Write(signed)
+		signed = h.Sum(nil)
+	}
+
+	var signerOpts crypto.SignerOpts = hashFunc
+	if template.SignatureAlgorithm != 0 && template.SignatureAlgorithm.isRSAPSS() {
+		signerOpts = &rsa.PSSOptions{
+			SaltLength: rsa.PSSSaltLengthEqualsHash,
+			Hash:       hashFunc,
+		}
+	}
+
+	var signature []byte
+	signature, err = key.Sign(rand, signed, signerOpts)
+	if err != nil {
+		return
+	}
+
+	signedCert, err := asn1.Marshal(certificate{
+		nil,
+		c,
+		signatureAlgorithm,
+		asn1.BitString{Bytes: signature, BitLength: len(signature) * 8},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Check the signature to ensure the crypto.Signer behaved correctly.
+	// We skip this check if the signature algorithm is MD5WithRSA as we
+	// only support this algorithm for signing, and not verification.
+	if sigAlg := getSignatureAlgorithmFromAI(signatureAlgorithm); sigAlg != MD5WithRSA {
+		if err := checkSignature(sigAlg, c.Raw, signature, key.Public()); err != nil {
+			return nil, fmt.Errorf("x509: signature over certificate returned by signer is invalid: %w", err)
+		}
+	}
+
+	return signedCert, nil
+}
+
 // pemCRLPrefix is the magic string that indicates that we have a PEM encoded
 // CRL.
 var pemCRLPrefix = []byte("-----BEGIN X509 CRL")
