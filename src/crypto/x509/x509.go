@@ -77,6 +77,10 @@ func ParsePKIXPublicKey(derBytes []byte) (pub interface{}, err error) {
 	return parsePublicKey(algo, &pki)
 }
 
+func MarshalPublicKey(pub interface{}) (publicKeyBytes []byte, publicKeyAlgorithm pkix.AlgorithmIdentifier, err error) {
+	return marshalPublicKey(pub)
+}
+
 func marshalPublicKey(pub interface{}) (publicKeyBytes []byte, publicKeyAlgorithm pkix.AlgorithmIdentifier, err error) {
 	switch pub := pub.(type) {
 	case *rsa.PublicKey:

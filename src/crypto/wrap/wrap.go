@@ -94,9 +94,11 @@ func WrapPublicKey(plaintext, key []byte, wrapAlgorithm string) (ciphertext []by
 		b.AddBytes(nonce)
 	})      
 
-	fmt.Printf("Wrapping a Public Key:\nOriginal public key: %x\nWrapped public key: %x\n\nWrapped with:\nCert PSK: %x\nNonce: %x\n\n", plaintext[:10], ciphertextPk[:10], key[:10], nonce[:10])
+	wrappedPk := b.BytesOrPanic()
 
-	return b.BytesOrPanic(), nil
+	fmt.Printf("Wrapping a Public Key (only the 10 first bytes are printed):\nOriginal public key: %x...\nWrapped public key: %x...\n\nWrapped with:\nCert PSK: %x...\nNonce: %x...\n\n", plaintext[:10], wrappedPk[:10], key[:10], nonce[:10])
+
+	return wrappedPk, nil
 }
 
 // UnwrapPublicKey unwraps a wrapped public key, i.e. it decrypts `ciphertext` (which is expected to be a
@@ -136,7 +138,7 @@ func UnwrapPublicKey(ciphertext, key []byte, wrapAlgorithm string) (plaintext []
 		return nil, errors.New("unknown wrap algorithm")
 	}
 
-	fmt.Printf("Unwrapping a public key:\nWrapped public key %x\nUnwrapped public key: %x\n\nUnwrapped with:\nCert PSK: %x\nNonce: %x\n\n", wrappedPk[:10], plaintext[:10], key[:10], nonce[:10])
+	fmt.Printf("Unwrapping a public key (only the 10 first bytes are printed):\nWrapped public key %x...\nUnwrapped public key: %x...\n\nUnwrapped with:\nCert PSK: %x...\nNonce: %x...\n\n", wrappedPk[:10], plaintext[:10], key[:10], nonce[:10])
 
 	return plaintext, nil
 }
