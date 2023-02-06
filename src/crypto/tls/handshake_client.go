@@ -13,17 +13,12 @@ import (
 	"crypto/liboqs_sig"
 	"crypto/rsa"
 	"crypto/subtle"
-	"crypto/keystore"
-	"crypto/wrap"
 	"crypto/x509"
-	"encoding/csv"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"hash"
 	"io"
 	"net"
-	"os"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -329,64 +324,10 @@ func (c *Conn) makeClientHello(minVersion uint16) (*clientHelloMsg, []clientKeyS
 }
 
 // clientHandshake initializes the TLS handshake in the client side.
-// PKIELP Modification: in the beginning of this function, the client will load the Cert PSK (from his Cert PSK database), that
-// he established with the current server, and construct the Cert PSK extension.
 func (c *Conn) clientHandshake() (err error) {
 	if c.config == nil {
 		c.config = defaultConfig()
 	}
-
-	var pskLabel, certPSK []byte
-	var certPSKExt certPSKExtension
-
-	if c.config.WrappedCertEnabled {
-		fmt.Printf("Wrapped Certificate Proposal is enabled\n\n")  // HS Prints
-		pskLabel, certPSK, err = loadCertPSK(c.conn.RemoteAddr().String(), c.config.PSKDBPath)
-		if err != nil {
-			return err
-		}
-
-		if pskLabel == nil {			
-			fmt.Printf("Client does not have an agreed Cert PSK with this server.\nClient is goint to establish a Cert PSK in this Handshake\n\n")  // HS Prints
-			certPSKExt = certPSKExtension{
-				establishPSK: true,
-				wrapAlgorithm: c.config.WrapAlgorithm,
-			}
-		} else {			
-			// If we are in the post-quantum scenario of the PKIELP, we need to set the wrapped issuer CA as the root CA
-			if !c.config.PreQuantumScenario {
-				ks, err := keystore.ReadKeyStore(c.config.TruststorePath, []byte(c.config.TruststorePassword))
-				if err != nil {
-					panic(err)
-				}
-					
-				trustedCertEntry, err := ks.GetTrustedCertificateEntry(hex.EncodeToString(certPSK))
-				if err != nil {
-					panic(err)
-				}
-			
-				trustedWrappedCA, err := x509.ParseCertificate(trustedCertEntry.Certificate.Content)
-				if err != nil {
-					panic(err)
-				}
-				
-				c.config.RootCAs.AddCert(trustedWrappedCA)
-			}
-
-			fmt.Printf("Client does have an agreed Cert PSK with this server:\n\n")  // HS Prints
-			certPSKExt = certPSKExtension{
-				establishPSK: false,
-				identities: [][]byte{pskLabel},
-			}
-
-			c.certPSK = certPSK
-
-			fmt.Printf("Cert PSK info:\n   Label: %x\n   Cert PSK: %x\n\n", pskLabel[:10], certPSK[:10])  // HS Prints
-			fmt.Printf("Client will send the PSK label in his ClientHello\n\n")  // HS Prints
-		}		
-	}
-
-	fmt.Printf("CertPSKExt: %s\n\n", certPSKExt.wrapAlgorithm)
 
 	handshakeTimings := createTLS13ClientHandshakeTimingInfo(c.config.Time)
 	c.clientHandshakeSizes = TLS13ClientHandshakeSizes{}
@@ -419,10 +360,6 @@ func (c *Conn) clientHandshake() (err error) {
 	}
 
 	cacheKey, session, earlySecret, binderKey := c.loadSession(helloResumed)
-
-	if c.config.WrappedCertEnabled {
-		hello.certPSK = certPSKExt
-	}
 
 	if cacheKey != "" && session != nil {
 		defer func() {
@@ -1128,7 +1065,6 @@ func (c *Conn) verifyServerCertificate(certificates [][]byte) error {
 			CurrentTime:   c.config.time(),
 			DNSName:       dnsName,
 			Intermediates: x509.NewCertPool(),
-			CertPSK: c.certPSK,
 		}
 		
 		for _, cert := range certs[1:] {
@@ -1143,7 +1079,7 @@ func (c *Conn) verifyServerCertificate(certificates [][]byte) error {
 	}
 
 	switch certs[0].PublicKey.(type) {
-	case *rsa.PublicKey, *ecdsa.PublicKey, ed25519.PublicKey, circlSign.PublicKey, *kem.PublicKey, *liboqs_sig.PublicKey, *wrap.PublicKey:
+	case *rsa.PublicKey, *ecdsa.PublicKey, ed25519.PublicKey, circlSign.PublicKey, *kem.PublicKey, *liboqs_sig.PublicKey:
 		break
 	default:
 		c.sendAlert(alertUnsupportedCertificate)
@@ -1292,45 +1228,4 @@ func hostnameInSNI(name string) string {
 		name = name[:len(name)-1]
 	}
 	return name
-}
-
-// loadCertPSK will load Cert PSK data from the record identified by `key` in the database located at `pskDBPath`. 
-func loadCertPSK(key, pskDBPath string) (pskLabel []byte, psk []byte, err error) {
-	csvFile, err := os.OpenFile(pskDBPath, os.O_RDWR|os.O_CREATE, 0664)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	defer csvFile.Close()
-
-	// read csv values using csv.Reader
-	csvReader := csv.NewReader(csvFile)
-	
-	for {
-		rec, err := csvReader.Read()
-		
-		if err == io.EOF {
-				break
-		}
-		
-		if err != nil {
-				return nil, nil, err
-		}
-
-		if rec[0] == key {
-			pskLabel, err = hex.DecodeString(rec[1])
-			if err != nil {
-				return nil, nil, err
-			}
-
-			psk, err = hex.DecodeString(rec[2])
-			if err != nil {
-				return nil, nil, err
-			}
-						
-			return pskLabel, psk, nil			
-		}
-	}
-
-	return nil, nil, nil
 }

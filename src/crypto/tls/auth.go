@@ -16,7 +16,6 @@ import (
 	"crypto/kem"
 	"crypto/liboqs_sig"
 	"crypto/rsa"
-	"crypto/wrap"
 	"errors"
 	"fmt"
 	"hash"
@@ -305,18 +304,6 @@ func signatureSchemesForCertificate(version uint16, cert *Certificate) []Signatu
 			sigAlgs = []SignatureScheme{SignatureScheme(tlsScheme.TLSIdentifier())}
 		case liboqs_sig.PublicKey:
 			sigAlgs = []SignatureScheme{liboqsSigSignatureSchemeMap[pub.SigId]}
-		case *wrap.PublicKey:
-			fmt.Printf("Certificate has a wrapped public key\n\n")  // HS Prints
-			switch pub.ClassicAlgorithm {
-			case elliptic.P256():
-				sigAlgs = []SignatureScheme{ECDSAWithP256AndSHA256}
-			case elliptic.P384():
-				sigAlgs = []SignatureScheme{ECDSAWithP384AndSHA384}
-			case elliptic.P521():
-				sigAlgs = []SignatureScheme{ECDSAWithP521AndSHA512}
-			default:
-				return nil
-			}
 		default:
 			return nil
 		}

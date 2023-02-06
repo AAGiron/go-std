@@ -7,16 +7,11 @@ package tls
 import (
 	"bytes"
 	"crypto"
-	"crypto/ecdsa"
-	"crypto/elliptic"
 	"crypto/hmac"
 	"crypto/kem"
-	"crypto/keystore"
 	"crypto/liboqs_sig"
 	"crypto/rsa"
-	"crypto/wrap"
 	"crypto/x509"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"hash"
@@ -55,8 +50,6 @@ type clientHandshakeStateTLS13 struct {
 	trafficSecret   []byte // client_application_traffic_secret_0
 
 	handshakeTimings CFEventTLS13ClientHandshakeTimingInfo
-
-	certPSK         []byte
 }
 
 // processDelegatedCredentialFromServer unmarshals the DelegatedCredential
@@ -188,12 +181,6 @@ func (hs *clientHandshakeStateTLS13) handshake() error {
 	hs.handshakeTimings.SendAppData = hs.handshakeTimings.FullProtocol
 	c.handleCFEvent(hs.handshakeTimings)
 	atomic.StoreUint32(&c.handshakeStatus, 1)
-
-	if c.wrappedIssuerCACertificate != nil {
-		if err := keystore.StoreTrustedCertificate(c.config.TruststorePath, c.config.TruststorePassword, hex.EncodeToString(c.certPSK), c.wrappedIssuerCACertificate); err != nil {
-			return err
-		}
-	}
 	
 	return nil
 }
@@ -686,7 +673,6 @@ func isPQTLSAuthUsed(peerCertificate *x509.Certificate, cert Certificate) bool {
 }
 
 // readServerCertificate
-// PKIELPModification: it was added support for unwrapping of wrapped certificate's public keys prior to verifying the handshake signature with it.
 func (hs *clientHandshakeStateTLS13) readServerCertificate() error {
 	c := hs.c
 	var certMsg *certificateMsgTLS13
@@ -803,19 +789,12 @@ func (hs *clientHandshakeStateTLS13) readServerCertificate() error {
 		return err
 	}
 
-	if c.config.WrappedCertEnabled {
-		c.pkiELPServerCertificate = certMsg.certificate.Certificate[0]
-	}
-	
-	if c.config.WrappedCertEnabled && c.config.PreQuantumScenario && len(certMsg.certificate.Certificate) == 3 {	
-		c.wrappedIssuerCACertificate = certMsg.certificate.Certificate[1]
-	}
 
 	if isPQTLSAuthUsed(c.peerCertificates[0], certMsg.certificate) {
 		if hs.keyKEMShare {
 			c.didPQTLS = true
 		}
-	} else if c.config.WrappedCertEnabled && c.config.PQTLSEnabled {
+	} else if c.config.PQTLSEnabled {
 		if hs.keyKEMShare {
 			c.didPQTLS = true
 		}
@@ -870,27 +849,6 @@ func (hs *clientHandshakeStateTLS13) readServerCertificate() error {
 		pk := c.peerCertificates[0].PublicKey
 		if c.verifiedDC != nil {
 			pk = c.verifiedDC.cred.publicKey
-		}
-
-		if hs.c.config.WrappedCertEnabled && len(hs.hello.certPSK.identities) > 0 && c.peerCertificates[0].PublicKeyAlgorithm == x509.WrappedECDSA {
-			fmt.Printf("Reading server's wrapped certificate:\n  Subject: %s\n  Subject Key ID: %x\n\n", c.peerCertificates[0].Subject.CommonName, c.peerCertificates[0].SubjectKeyId[:10])
-			fmt.Printf("Verifying handshake signature...\n\n")
-
-			wrappedPub, ok := pk.(*wrap.PublicKey)
-			if ok {			
-				unwrappedPk, err := wrap.UnwrapPublicKey(wrappedPub.WrappedPk, hs.c.certPSK, wrappedPub.WrapAlgorithm)
-				if err != nil {
-					return err
-				}
-
-				x, y := elliptic.Unmarshal(wrappedPub.ClassicAlgorithm, unwrappedPk)
-
-				pk = &ecdsa.PublicKey{
-					Curve: wrappedPub.ClassicAlgorithm,
-					X:     x,
-					Y:     y,
-				}
-			}			
 		}
 
 		signed := signedMessage(sigHash, serverSignatureContext, hs.transcript)
@@ -1144,7 +1102,6 @@ func (hs *clientHandshakeStateTLS13) sendClientCertificate() error {
 }
 
 // sendClientFinished
-// PKIELP Modification: an additional step was added to derive the Handshake Master Secret into the Cert PSK Master Secret.
 func (hs *clientHandshakeStateTLS13) sendClientFinished() error {
 	c := hs.c
 
@@ -1177,11 +1134,6 @@ func (hs *clientHandshakeStateTLS13) sendClientFinished() error {
 	if !c.config.SessionTicketsDisabled && c.config.ClientSessionCache != nil && !c.config.ECHEnabled {
 		c.resumptionSecret = hs.suite.deriveSecret(hs.masterSecret,
 			resumptionLabel, hs.transcript)
-	}
-
-	if c.config.WrappedCertEnabled {
-		c.certPSKMasterSecret = hs.suite.deriveSecret(hs.masterSecret,
-			wrappedCertLabel, hs.transcript)
 	}
 
 	return nil
@@ -1233,45 +1185,6 @@ func (c *Conn) handleNewSessionTicket(msg *newSessionTicketMsgTLS13) error {
 
 	cacheKey := clientSessionCacheKey(c.conn.RemoteAddr(), c.config)
 	c.config.ClientSessionCache.Put(cacheKey, session)
-
-	return nil
-}
-
-// handleNewCertPSK process a NewCertPSK TLS handshake message received from the server.
-// The `nonce` field of the message will be used in the Cert PSK derivation, the `wrapAlgorithm` field
-// will be used to determine the length of the Cert PSK, and the `label` field will be used during the storage
-// of the generated Cert PSK as an identifier of it.
-func (c *Conn) handleNewCertPSK(msg *newCertPSKMsgTLS13) error {
-	fmt.Printf("Client is handling a NewCertPSK message:\n  Nonce: %x\n  Label: %x\n\n", msg.nonce[:10], msg.label[:10])
-	
-	if !c.isClient {
-		c.sendAlert(alertUnexpectedMessage)
-		return errors.New("tls: received new session ticket from a client")
-	}
-
-	cipherSuite := cipherSuiteTLS13ByID(c.cipherSuite)
-	if cipherSuite == nil {
-		return c.sendAlert(alertInternalError)
-	}
-
-	var pskLen int	
-	if msg.wrapAlgorithm == "AES256" {
-		pskLen = cipherSuite.hash.Size()		
-	} else if msg.wrapAlgorithm == "Ascon80pq" {
-		pskLen = wrap.CRYPTO_KEYBYTES
-	} else {
-		return fmt.Errorf("could not handle NewCertPSKMsg due to unknown wrap algorithm: %s", msg.wrapAlgorithm)
-	}
-
-	// Compute the cert PSK
-	psk := cipherSuite.expandLabel(c.certPSKMasterSecret, "cert psk",
-		msg.nonce, pskLen)
-
-	if err := certPSKWriteToFile(c.conn.RemoteAddr().String(), msg.label, psk, msg.wrapAlgorithm, true, c.config.PSKDBPath); err != nil {
-		return err
-	}
-
-	fmt.Printf("Computed Cert PSK: %x\n\n", psk[:10])
 
 	return nil
 }

@@ -73,11 +73,6 @@ type Conn struct {
 	// NewSessionTicket messages. nil if config.SessionTicketsDisabled.
 	resumptionSecret []byte
 
-	// certPSKMasterSecret is the cert_psk_master_secret, used to 
-	// derive the Cert PSK. If config.WrappedCertEnabled
-	// is false, then certPSKMasterSecret will be nil
-	certPSKMasterSecret []byte
-
 	// ticketKeys is the set of active session ticket keys for this
 	// connection. The first one is used to encrypt new tickets and
 	// all are tried to decrypt tickets.
@@ -164,16 +159,6 @@ type Conn struct {
 	clientHandshakeSizes TLS13ClientHandshakeSizes
 	serverHandshakeSizes TLS13ServerHandshakeSizes
 
-	// certPSK is the Cert PSK of the PKIELP proposal.
-	certPSK []byte
-
-	// pkiELPServerCertificate is the certificate sent by the server in the PKIELP proposal. This field is only set in the server side.
-	pkiELPServerCertificate []byte
-
-	// wrappedIssuerCACertificate is the wrapped issuer CA certificate sent in the certificate chain. This certificate is received during
-	// the handshake and temporarily stored here, until the handshake is completed. When the handshake is
-	// completed, this certificate will be stored in the client's truststore.	
-	wrappedIssuerCACertificate []byte
 }
 
 // Access to net.Conn methods.
@@ -1138,8 +1123,6 @@ func (c *Conn) readHandshake() (interface{}, error) {
 		m = new(keyUpdateMsg)
 	case typeCertificateCachedInfo:
 		m = new(certificateMsgTLS13CachedInfo)
-	case typeNewCertPSK:
-		m = new(newCertPSKMsgTLS13)
 	default:
 		return nil, c.in.setErrorLocked(c.sendAlert(alertUnexpectedMessage))
 	}
@@ -1289,8 +1272,6 @@ func (c *Conn) handlePostHandshakeMessage() error {
 		return c.handleNewSessionTicket(msg)
 	case *keyUpdateMsg:
 		return c.handleKeyUpdate(msg)
-	case *newCertPSKMsgTLS13:
-		return c.handleNewCertPSK(msg)
 	default:
 		c.sendAlert(alertUnexpectedMessage)
 		return fmt.Errorf("tls: received unexpected handshake message of type %T", msg)
@@ -1532,7 +1513,6 @@ func (c *Conn) connectionStateLocked() ConnectionState {
 	state.ClientHandshakeSizes = c.clientHandshakeSizes
 	state.ServerHandshakeSizes = c.serverHandshakeSizes
 
-	state.PKIELPServerCertificate = c.pkiELPServerCertificate
 
 	if !c.didResume && c.vers != VersionTLS13 {
 		if c.clientFinishedIsFirst {

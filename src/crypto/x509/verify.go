@@ -222,11 +222,6 @@ type VerifyOptions struct {
 	// certificates from consuming excessive amounts of CPU time when
 	// validating. It does not apply to the platform verifier.
 	MaxConstraintComparisions int
-
-	// CertPSK is the Cert PSK, which is necessary to validate certificate chains
-	// containing wrapped certificates, since to verify a signature made by a wrapped
-	// certificate we need to unwrap it public key.
-	CertPSK []byte
 }
 
 const (
@@ -870,13 +865,7 @@ func (c *Certificate) buildChains(cache map[*Certificate][][]*Certificate, curre
 		}
 
 		var err error
-		if candidate.PublicKeyAlgorithm == WrappedECDSA {			
-			err = c.CheckSignatureFromWrapped(candidate, opts.CertPSK)
-		} else {
-			err = c.CheckSignatureFrom(candidate)
-		}
-
-		if err != nil {
+		if err := c.CheckSignatureFrom(candidate); err != nil {
 			if hintErr == nil {
 				hintErr = err
 				hintCert = candidate

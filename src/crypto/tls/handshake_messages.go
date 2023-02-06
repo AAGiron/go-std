@@ -98,8 +98,7 @@ type clientHelloMsg struct {
 	keyShares                        []keyShare
 	earlyData                        bool
 	pskModes                         []uint8
-	pskIdentities                    []pskIdentity
-	certPSK                          certPSKExtension						
+	pskIdentities                    []pskIdentity					
 	pskBinders                       [][]byte
 	ech                              []byte
 	echIsInner                       bool
@@ -313,30 +312,6 @@ func (m *clientHelloMsg) marshal() []byte {
 				// RFC 8446, Section 4.2.10
 				b.AddUint16(extensionEarlyData)
 				b.AddUint16(0) // empty extension_data
-			}
-
-			if m.certPSK.establishPSK || (len(m.certPSK.identities) > 0) {				
-				var establish uint8
-				if m.certPSK.establishPSK {
-					establish = 1
-				} else {
-					establish = 0
-				}
-
-				b.AddUint16(extensionCertPSK)
-				b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
-					b.AddUint8(establish)
-					b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
-						for _, identity := range m.certPSK.identities {
-							b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
-								b.AddBytes(identity)
-							})
-						}
-					})
-					b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
-						b.AddBytes([]byte(m.certPSK.wrapAlgorithm))
-					})
-				})								
 			}
 
 			if len(m.pskModes) > 0 {
@@ -673,39 +648,6 @@ func (m *clientHelloMsg) unmarshal(data []byte) bool {
 				}
 				m.keyShares = append(m.keyShares, ks)
 			}
-		case extensionCertPSK:
-			var identities cryptobyte.String
-			var establish uint8
-			var wrapAlgorithmBytes []byte
-
-			if !extData.ReadUint8(&establish) {
-				return false
-			}
-
-			if establish == 1 {
-				m.certPSK.establishPSK = true
-			} else {
-				m.certPSK.establishPSK = false
-			}
-			
-			if !extData.ReadUint16LengthPrefixed(&identities) {
-				return false
-			}
-
-			for !identities.Empty() {
-				var certPSKIdentity []byte
-				if !readUint16LengthPrefixed(&identities, &certPSKIdentity) ||				
-					len(certPSKIdentity) == 0 {
-					return false
-				}
-				m.certPSK.identities = append(m.certPSK.identities, certPSKIdentity)
-			}
-
-			if !readUint16LengthPrefixed(&extData, &wrapAlgorithmBytes) {
-				return false
-			}
-
-			m.certPSK.wrapAlgorithm = string(wrapAlgorithmBytes)
 		
 		case extensionEarlyData:
 			// RFC 8446, Section 4.2.10
@@ -1265,66 +1207,6 @@ func (m *newSessionTicketMsgTLS13) unmarshal(data []byte) bool {
 			return false
 		}
 	}
-
-	return true
-}
-
-// newCertPSKMsgTLS13 is the NewCertPSK handshake message, which was created for the PKIELP.
-// This message is sent by the TLS server, and it holds the data necessary for the client to
-// derive the same Cert PSK as the server.
-type newCertPSKMsgTLS13 struct {
-	// raw is the raw bytes of the newCertPSKMsgTLS13 struct marshalled.
-	raw          []byte
-
-	// nonce is the nonce used by the server to derive the Cert PSK.
-	nonce        []byte
-
-	// label is the Cert PSK's label/identity (created by the server) which uniquely identifies the Cert PSK.
-	label        []byte
-	
-	// wrapAlgorithm is the name of the wrap algorithm used to derive the Cert PSK.
-	wrapAlgorithm string	
-}
-
-
-func (m *newCertPSKMsgTLS13) marshal() []byte {
-	if m.raw != nil {
-		return m.raw
-	}
-
-	var b cryptobyte.Builder
-	b.AddUint8(typeNewCertPSK)
-	b.AddUint24LengthPrefixed(func(b *cryptobyte.Builder) {		
-		b.AddUint8LengthPrefixed(func(b *cryptobyte.Builder) {
-			b.AddBytes(m.nonce)			
-		})
-		b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
-			b.AddBytes(m.label)
-		})
-		b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
-			b.AddBytes([]byte(m.wrapAlgorithm))
-		})						
-	})
-
-	m.raw = b.BytesOrPanic()
-	return m.raw
-}
-
-func (m *newCertPSKMsgTLS13) unmarshal(data []byte) bool {	
-	*m = newCertPSKMsgTLS13{raw: data}
-	s := cryptobyte.String(data)
-
-	var wrapAlgorithmBytes []byte
-
-	if !s.Skip(4) ||  // message type and uint24 length field
-		!readUint8LengthPrefixed(&s, &m.nonce) ||
-		!readUint16LengthPrefixed(&s, &m.label) ||
-		!readUint16LengthPrefixed(&s, &wrapAlgorithmBytes) ||
-		!s.Empty() {
-		return false
-	}
-
-	m.wrapAlgorithm = string(wrapAlgorithmBytes)
 
 	return true
 }

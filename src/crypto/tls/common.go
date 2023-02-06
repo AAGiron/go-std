@@ -17,15 +17,11 @@ import (
 	"crypto/rsa"
 	"crypto/sha512"
 	"crypto/x509"
-	"encoding/csv"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"internal/cpu"
 	"io"
-	"io/ioutil"
 	"net"
-	"os"
 	"runtime"
 	"sort"
 	"strings"
@@ -80,7 +76,6 @@ const (
 	typeCertificateVerify   uint8 = 15
 	typeClientKeyExchange   uint8 = 16
 	typeCertificateCachedInfo uint8 = 17  // Unassigned number. https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-7	
-	typeNewCertPSK					uint8 = 19  // Unassigned number. https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-7	
 	typeFinished            uint8 = 20
 	typeCertificateStatus   uint8 = 22
 	typeKeyUpdate           uint8 = 24
@@ -501,9 +496,6 @@ type ConnectionState struct {
 
 	ClientHandshakeSizes TLS13ClientHandshakeSizes
 	ServerHandshakeSizes TLS13ServerHandshakeSizes
-
-	// PKIELPServerCertificate is the certificate sent by the server in the PKIELP proposal. This field is only set in the server side.
-	PKIELPServerCertificate []byte
 }
 
 // ExportKeyingMaterial returns length bytes of exported key material in a new
@@ -1097,14 +1089,6 @@ type Config struct {
 	// connection.
 	ECHEnabled bool
 
-	// WrappedCertEnabled determines whether the PKIELP proposal (also referred as wrapped certificates) is enabled.
-	WrappedCertEnabled bool
-		
-	IgnoreSigAlg bool
-
-	// WrappedCertsDir is the path to the directory where the wrapped certificates are stored.
-	WrappedCertsDir string
-
 	// ClientECHConfigs are the parameters used by the client when it offers the
 	// ECH extension. If ECH is enabled, a suitable configuration is found, and
 	// the client supports TLS 1.3, then it will offer ECH in this handshake.
@@ -1167,23 +1151,6 @@ type Config struct {
 	// autoSessionTicketKeys is like sessionTicketKeys but is owned by the
 	// auto-rotation logic. See Config.ticketKeys.
 	autoSessionTicketKeys []ticketKey
-
-	// PSKDBPath is the path to the Cert PSK database file.
-	PSKDBPath string
-
-	// TruststorePath is the path to the client's truststore, where trusted certificates are stored.
-	TruststorePath string
-
-	// TruststorePassword is the password of the client's truststore.
-	TruststorePassword string
-
-	// PreQuantumScenario is true if we are simulating a TLS handshake in the pre-quantum scenario
-	// of the PKIELP proposal
-	PreQuantumScenario bool
-
-	// WrapAlgorithm is the wrap algorithm that the client is willing to use in the PKIELP proposal.
-	// WrapAlgorithm is used exclusively by the client, which will send it through the Cert PSK extension of the ClientHello.
-	WrapAlgorithm string
 
 	// OCSPResponseFilePath is the path to the file where the OCSP Response made by the ACME server was written to. If this string is not empty,
 	// the file will be read and the OCSP Response from it will be sent through OCSP stapling in the handshake.
@@ -1279,13 +1246,6 @@ func (c *Config) Clone() *Config {
 		CFControl:                   c.CFControl,
 		sessionTicketKeys:           c.sessionTicketKeys,
 		autoSessionTicketKeys:       c.autoSessionTicketKeys,
-		WrappedCertEnabled:          c.WrappedCertEnabled,
-		IgnoreSigAlg:                c.IgnoreSigAlg,
-		PSKDBPath:                   c.PSKDBPath,
-		TruststorePath: 						 c.TruststorePath,
-		TruststorePassword: 				 c.TruststorePassword,
-		PreQuantumScenario:          c.PreQuantumScenario,
-		WrapAlgorithm:               c.WrapAlgorithm,
 		OCSPResponseFilePath:        c.OCSPResponseFilePath,
 	}
 }
@@ -2128,110 +2088,4 @@ func getMessageLength(msg []byte) (uint32, error) {
 	}
 
 	return msg_size, nil
-}
-
-// certPSKWriteToFile writes Cert PSKs and Cert PSK-related data to the TLS client's and TLS server's
-// Cert PSK database, which are CSV files.
-// TLS clients will store records in the following format: 
-//	Server IP, Cert PSK identity/label (hexstring), Cert PSK (hexstring), wrap algorithm
-// TLS servers will store records in the following format:
-//	Cert PSK identity/label (hexstring), Cert PSK (hexstring), wrap algorithm
-func certPSKWriteToFile(peerIP string, pskLabelBytes, pskBytes []byte, wrapAlgorithm string, isClient bool, pskDBPath string) error {
-
-	pskLabel := hex.EncodeToString(pskLabelBytes)
-	psk := hex.EncodeToString(pskBytes)
-
-	fileName := pskDBPath
-
-	csvFile, err := os.OpenFile(fileName, os.O_APPEND|os.O_RDWR|os.O_CREATE, 0664)	
-	if err != nil {
-		return err
-	}	
-
-	defer csvFile.Close()	
-
-	if isClient {
-		// Here we are creating a temporary file to copy all the 'fileName' Cert PSK records, except the one
-		// that corresponds to the 'peerIP'. After copying, we are appending a new Cert PSK record corresponding
-		// to 'peerIP'. Then we will copy all the content of this temporary file to the original file, 'fileName'.
-		// In this way, we won't have more than one Cert PSK established with one server.
-		
-		csvFileUpdated, err := os.OpenFile(fileName + ".temp", os.O_APPEND|os.O_RDWR|os.O_CREATE, 0664)
-		if err != nil {
-			panic(err)
-		}
-		defer csvFileUpdated.Close()
-
-		csvReader := csv.NewReader(csvFile)
-		csvUpdatedWriter := csv.NewWriter(csvFileUpdated)
-
-		for {
-			rec, err := csvReader.Read()
-			
-			if err == io.EOF {
-					break
-			}
-			
-			if err != nil {
-				panic(err)
-			}
-			
-			if rec[0] != peerIP {
-				if err := csvUpdatedWriter.Write(rec); err != nil {
-					panic(err)
-				}
-			}
-		}
-
-		rec := []string{peerIP, pskLabel, psk, wrapAlgorithm} 
-
-		if err := csvUpdatedWriter.Write(rec); err != nil {
-			panic(err)
-		}
-			
-		csvUpdatedWriter.Flush()
-
-		/* ------------- Copying temporary file content to original file ------------ */
-		
-		csvFile.Close()
-		csvFileUpdated.Close()		
-
-		input, err := ioutil.ReadFile(fileName + ".temp")
-		if err != nil {
-			panic(err)
-		}
-
-		err = ioutil.WriteFile(fileName, input, 0664)
-		if err != nil {
-			panic(err)			
-		}
-
-		os.Remove(fileName + ".temp")	
-		
-	} else {
-		csvwriter := csv.NewWriter(csvFile)	
-		rec := []string{pskLabel, psk, wrapAlgorithm}
-		
-		if err := csvwriter.Write(rec); err != nil {
-			return err
-		}
-			
-		csvwriter.Flush()	
-	}	
-	return nil
-}
-
-// certPSKExtension is the ClientHello's Cert PSK extension, sent by the client to negotiate and establish
-// parameters related to the PKIELP proposal.
-type certPSKExtension struct {
-	// establishPSK is true if the client is willing to establish a Cert PSK in the handshake.
-	establishPSK bool
-
-	// identities are the Cert PSK identities/label of the Cert PSKs that the client has established with
-	// the server. The server will use this field to select the correct wrapped certificate to be used in the handshake.
-	identities [][]byte
-
-	// wrapAlgorithm is the wrap algorithm that the client wants the Cert PSK to be suitable for.
-	// This field is used only when `establishPSK` is true.
-	wrapAlgorithm string
 }
