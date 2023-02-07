@@ -113,9 +113,6 @@ const (
 	extensionECHIsInner              uint16 = 0xda09 // draft-ietf-tls-esni-10
 	extensionECHOuterExtensions      uint16 = 0xfd00 // draft-ietf-tls-esni-10
 	extensionPDKKEMTLS               uint16 = 0xfd01 // arbitraly chosen
-
-	// extensionCertPSK is the number of the ClientHello's extension Cert PSK
-	extensionCertPSK                 uint16 = 0xfd02 // arbitraly chosen
 )
 
 // TLS signaling cipher suite values
@@ -325,12 +322,6 @@ var supportedSignatureAlgorithmsDC = []SignatureScheme{
 	// Liboqs PQC
 	KEMTLSWithOQS_Kyber512, KEMTLSWithOQS_Kyber768, KEMTLSWithOQS_Kyber1024, KEMTLSWithLightSaber_KEM, KEMTLSWithSaber_KEM, KEMTLSWithFireSaber_KEM, 
 	KEMTLSWithNTRU_HPS_2048_509, KEMTLSWithNTRU_HPS_2048_677, KEMTLSWithNTRU_HPS_4096_821, KEMTLSWithNTRU_HPS_4096_1229, KEMTLSWithNTRU_HRSS_701, KEMTLSWithNTRU_HRSS_1373,	
-}
-
-// supportedWrapAlgorithms is a list of symmetric encryption algorithms names which are supported
-// in wrapped certificates.
-var supportedWrapAlgorithms = []string {
-	"AES256","Ascon80pq",
 }
 
 // helloRetryRequestRandom is set as the Random value of a ServerHello

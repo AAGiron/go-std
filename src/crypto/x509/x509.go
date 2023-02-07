@@ -448,7 +448,7 @@ var signatureAlgorithmDetails = []struct {
 	{SphincsShake256sSimple, "Sphincsshake256ssimple", oidSignatureSphincsshake256ssimple, PQTLS, crypto.Hash(0)},
 	{Dilithium3, "Dilithium3", oidSignatureDilithium3, PQTLS, crypto.Hash(0)},
 	{Dilithium5, "Dilithium5", oidSignatureDilithium5, PQTLS, crypto.Hash(0)},
-	{Falcon1024, "Falcon2014", oidSignatureFalcon1024, PQTLS, crypto.Hash(0)},
+	{Falcon1024, "Falcon1024", oidSignatureFalcon1024, PQTLS, crypto.Hash(0)},
 
 }
 
