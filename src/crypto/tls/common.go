@@ -290,7 +290,7 @@ var supportedSignatureAlgorithms = []SignatureScheme{
 
 	// Liboqs Signature
 	PQTLS_P256_Dilithium2, PQTLS_P256_Falcon512, PQTLS_P256_Sphincshake128ssimple, PQTLS_P384_Dilithium3, PQTLS_P384_RainbowIIIClassic, PQTLS_P521_Dilithium5, PQTLS_P521_Falcon1024, PQTLS_P521_Sphincshake256ssimple,
-	PQTLS_Dilithium2, PQTLS_Falcon512, PQTLS_Dilithium3, PQTLS_P521_Dilithium5, PQTLS_P521_Falcon1024, PQTLS_sphincsshake128ssimple, PQTLS_sphincsshake256ssimple,
+	PQTLS_Dilithium2, PQTLS_Falcon512, PQTLS_Falcon1024, PQTLS_Dilithium3, PQTLS_Dilithium5, PQTLS_P521_Dilithium5, PQTLS_P521_Falcon1024, PQTLS_sphincsshake128ssimple, PQTLS_sphincsshake256ssimple,
 
 }
 
