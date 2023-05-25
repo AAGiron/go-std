@@ -521,9 +521,6 @@ func (hs *clientHandshakeStateTLS13) establishHandshakeKeys() error {
 					return err
 				}
 				hs.keyKEMShare = true
-
-				// Secret Print
-				fmt.Printf("\nTLS: Client has successfully decapsulated a %s KEM ciphertext sent by the server in it's ServerHello...\n\n", CurveIDToString(hs.serverHello.serverShare.group))
 			}
 		}
 	}

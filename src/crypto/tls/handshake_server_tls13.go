@@ -484,8 +484,6 @@ GroupSelection:
 		hs.sharedKey = sharedKey
 		hs.keyKEMShare = true
 		
-		// Secret Print
-		fmt.Printf("\nTLS: Server successfully performed a %s KEX encapsulation. Sending the corresponding ciphertext through the ServerHello...\n\n", CurveIDToString(hs.hello.serverShare.group))
 	} else {
 		if _, ok := curveForCurveID(selectedGroup); (selectedGroup != X25519 && !selectedGroup.isKEM()) && !ok {
 			c.sendAlert(alertInternalError)
