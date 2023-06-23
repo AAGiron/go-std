@@ -3299,3 +3299,7 @@ func SignFromParams(rand io.Reader, signAlgo SignatureAlgorithm, toSign []byte, 
 	return signature, signatureAlgorithm, nil
 
 }
+
+func OidFromLiboqsSig(ID liboqs_sig.ID) asn1.ObjectIdentifier {
+	return oidSignatureFromSigID[ID]
+}
