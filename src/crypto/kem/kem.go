@@ -319,3 +319,7 @@ func Decapsulate(privateKey *PrivateKey, ciphertext []byte) (sharedSecret []byte
 		return nil, errors.New("crypto/kem: internal error: unsupported KEM in Decapsulate")
 	}
 }
+
+func SchemeFromID(id ID) string {
+	return liboqsPQCKEMString[id]
+}
